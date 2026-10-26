@@ -1,0 +1,807 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Enums
+
+enum Role {
+  SUPER_ADMIN
+  PROPERTY_MANAGER
+  ENQUIRY_MANAGER
+  /// Staff or contractor managing construction projects in BuildTrace.
+  PROJECT_MANAGER
+  /// Public customer account: saved properties, scenarios, own enquiries and own projects only.
+  CUSTOMER
+}
+
+/// How reliable a property's mapped boundary is. Never shown as "surveyed" without evidence.
+enum BoundaryStatus {
+  NONE
+  APPROXIMATE
+  SURVEYED
+}
+
+enum PassportStatus {
+  NOT_PROVIDED
+  RECEIVED
+  UNDER_REVIEW
+  REVIEWED
+  NEEDS_FOLLOW_UP
+}
+
+/// Whether a nearby facility exists today, is officially proposed, or is unconfirmed.
+enum FacilityStatus {
+  EXISTING
+  PROPOSED
+  UNCONFIRMED
+}
+
+enum FinishLevel {
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
+enum BuildStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  HANDOVER
+  COMPLETED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  REPORTED_COMPLETE
+  INSPECTED
+  BLOCKED
+}
+
+/// Who stands behind a progress record — contractor claims are distinguished from inspections.
+enum EvidenceSource {
+  CONTRACTOR_REPORTED
+  STAFF_OBSERVED
+  INDEPENDENT_INSPECTION
+  PROFESSIONAL_CERTIFICATE
+}
+
+enum ChangeStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+/// What kind of property a listing is. Land-type listings and home-type listings show different fields.
+enum PropertyType {
+  RESIDENTIAL_PLOT
+  LAND
+  HOUSE
+  VILLA
+}
+
+/// Whether the listing is visible on the public website.
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+}
+
+/// Commercial availability, independent of publication.
+enum Availability {
+  AVAILABLE
+  RESERVED
+  SOLD
+  UNAVAILABLE
+}
+
+enum PriceDisplay {
+  SHOW_PRICE
+  CONTACT_FOR_PRICE
+}
+
+enum ImageKind {
+  PHOTO
+  FLOOR_PLAN
+  SITE_PLAN
+}
+
+enum ProjectStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+}
+
+enum EnquiryType {
+  GENERAL
+  PROPERTY
+  PLOT
+  HOUSE
+  CONSTRUCTION
+  PROJECT
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  IN_PROGRESS
+  CLOSED
+  SPAM
+}
+
+enum SiteVisitStatus {
+  NEW
+  CONTACTED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum TimeSlot {
+  MORNING
+  MIDDAY
+  AFTERNOON
+  EVENING
+}
+
+// ─────────────────────────────── Staff & security
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role
+  active       Boolean   @default(true)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  phone              String?
+  /// Customer consent to receive new-listing alerts. Separate from enquiry consent.
+  marketingConsent   Boolean            @default(false)
+  sessions           Session[]
+  auditEvents        AuditEvent[]
+  savedProperties    SavedProperty[]
+  scenarios          PlanningScenario[]
+  savedSearches      SavedSearch[]
+  customerEnquiries  Enquiry[]          @relation("EnquiryCustomer")
+  customerVisits     SiteVisit[]        @relation("SiteVisitCustomer")
+  buildProjects      BuildProject[]     @relation("BuildCustomer")
+  managedBuilds      BuildProject[]     @relation("BuildManager")
+  buildUpdates       BuildUpdate[]
+  buildQuestions     BuildQuestion[]    @relation("QuestionAuthor")
+  passportReviews    PassportItem[]
+  assignedEnquiries  Enquiry[]          @relation("EnquiryAssignee")
+  assignedSiteVisits SiteVisit[]        @relation("SiteVisitAssignee")
+  notes              LeadNote[]
+}
+
+/// Server-side sessions. Only a SHA-256 hash of the cookie token is stored.
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+// ─────────────────────────────── Catalogue
+
+model Location {
+  id            String     @id @default(cuid())
+  slug          String     @unique
+  name          String
+  city          String?
+  district      String?
+  state         String?
+  /// Marks a locality the company actively serves. Used for honest location SEO.
+  isServiceArea Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  properties    Property[]
+  projects      Project[]
+}
+
+model Amenity {
+  id         String     @id @default(cuid())
+  slug       String     @unique
+  name       String
+  properties Property[]
+}
+
+model Property {
+  id            String            @id @default(cuid())
+  /// Human-readable property ID shown to visitors, e.g. VDP-0007.
+  referenceCode String            @unique
+  slug          String            @unique
+  title         String
+  summary       String?
+  description   String?
+  type          PropertyType
+  publication   PublicationStatus @default(DRAFT)
+  availability  Availability      @default(AVAILABLE)
+  featured      Boolean           @default(false)
+  /// Sample listings are shown with a visible "Sample listing" label and must be removed before launch.
+  isSample      Boolean           @default(false)
+
+  locationId        String?
+  location          Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  /// Public locality description. Never put a private street address here unless authorised.
+  localityLabel     String?
+  latitude          Float?
+  longitude         Float?
+  /// Only when true are exact coordinates shown publicly.
+  showExactLocation Boolean   @default(false)
+  mapUrl            String?
+
+  priceAmount  BigInt?
+  priceDisplay PriceDisplay @default(CONTACT_FOR_PRICE)
+  /// Price that may be used publicly for filtering and sorting. Null when the price is hidden.
+  publicPrice  BigInt?
+  priceNote    String?
+
+  landAreaSqft      Float?
+  landAreaLabel     String?
+  plotDimensions    String?
+  facing            String?
+  builtUpAreaSqft   Float?
+  /// builtUpAreaSqft for homes, landAreaSqft for land; used for sorting by area.
+  primaryAreaSqft   Float?
+  bedrooms          Int?
+  bathrooms         Int?
+  floors            Int?
+  accessRoad        String?
+  utilities         String?
+  developmentStatus String?
+  constructionSpecs String?
+  approvalInfo      String?
+
+  projectId   String?
+  project     Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  developerId String?
+  developer   Developer? @relation(fields: [developerId], references: [id], onDelete: SetNull)
+
+  // ── Property Twin & Studio geometry (only from records — never invented)
+  /// Numeric frontage (road side) and depth in feet, used by Property Studio.
+  plotWidthFt      Float?
+  plotDepthFt      Float?
+  /// Bearing in degrees of the direction the road-facing edge points to (0 = north). Null when unknown.
+  frontBearing     Float?
+  /// Boundary as [[lat, lng], …] — shown publicly only with showExactLocation.
+  boundary         Json?
+  boundaryStatus   BoundaryStatus @default(NONE)
+  boundarySource   String?
+  setbackFrontFt   Float?
+  setbackRearFt    Float?
+  setbackSideFt    Float?
+  maxCoveragePct   Float?
+  siteConstraints  String?
+  /// [{ name, kind, distanceKm, status: EXISTING|PROPOSED|UNCONFIRMED, source }]
+  nearbyFacilities Json           @default("[]")
+
+  seoTitle       String?
+  seoDescription String?
+
+  amenities     Amenity[]
+  images        PropertyImage[]
+  documents     PropertyDocument[]
+  enquiries     Enquiry[]
+  siteVisits    SiteVisit[]
+  passport      PassportItem[]
+  activity      PropertyActivity[]
+  savedBy       SavedProperty[]
+  scenarios     PlanningScenario[]
+  buildProjects BuildProject[]
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([publication, availability])
+  @@index([type])
+  @@index([publicPrice])
+  @@index([locationId])
+}
+
+model PropertyImage {
+  id         String    @id @default(cuid())
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url        String
+  alt        String
+  kind       ImageKind @default(PHOTO)
+  sortOrder  Int       @default(0)
+  width      Int?
+  height     Int?
+  createdAt  DateTime  @default(now())
+
+  @@index([propertyId, sortOrder])
+}
+
+model PropertyDocument {
+  id            String         @id @default(cuid())
+  propertyId    String
+  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  title         String
+  url           String
+  /// Private documents are only reachable by staff.
+  isPublic      Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  passportItems PassportItem[]
+}
+
+model Project {
+  id             String            @id @default(cuid())
+  slug           String            @unique
+  name           String
+  summary        String?
+  description    String?
+  status         ProjectStatus     @default(ONGOING)
+  publication    PublicationStatus @default(DRAFT)
+  isSample       Boolean           @default(false)
+  locationId     String?
+  location       Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  localityLabel  String?
+  highlights     String?
+  approvalInfo   String?
+  seoTitle       String?
+  seoDescription String?
+  images         ProjectImage[]
+  properties     Property[]
+  enquiries      Enquiry[]
+  siteVisits     SiteVisit[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model ProjectImage {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String
+  sortOrder Int      @default(0)
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  @@index([projectId, sortOrder])
+}
+
+// ─────────────────────────────── Leads
+
+model Enquiry {
+  id             String        @id @default(cuid())
+  type           EnquiryType
+  status         EnquiryStatus @default(NEW)
+  name           String
+  phone          String
+  email          String?
+  message        String?
+  /// Kept even if the listing is later removed, so history is never lost.
+  propertyId     String?
+  property       Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  propertyLabel  String?
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // Construction enquiry details
+  siteLocation   String?
+  plotAreaSqft   Float?
+  houseSizeSqft  Float?
+  budgetRange    String?
+  startTimeframe String?
+  hasLand        Boolean?
+
+  consent      Boolean    @default(false)
+  sourcePath   String?
+  ipHash       String?
+  fingerprint  String
+  customerId   String?
+  customer     User?      @relation("EnquiryCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  scenarioId   String?
+  assignedToId String?
+  assignedTo   User?      @relation("EnquiryAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  followUpAt   DateTime?
+  notes        LeadNote[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([fingerprint, createdAt])
+}
+
+model SiteVisit {
+  id            String          @id @default(cuid())
+  status        SiteVisitStatus @default(NEW)
+  propertyId    String?
+  property      Property?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  projectId     String?
+  project       Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  subjectLabel  String
+  preferredDate DateTime        @db.Date
+  timeSlot      TimeSlot
+  name          String
+  phone         String
+  email         String?
+  message       String?
+  consent       Boolean         @default(false)
+  /// Set by staff once the visit is actually confirmed with the visitor.
+  scheduledFor  DateTime?
+  ipHash        String?
+  fingerprint   String
+  customerId    String?
+  customer      User?           @relation("SiteVisitCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  assignedToId  String?
+  assignedTo    User?           @relation("SiteVisitAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  followUpAt    DateTime?
+  notes         LeadNote[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([status, preferredDate])
+  @@index([fingerprint, createdAt])
+}
+
+model LeadNote {
+  id          String     @id @default(cuid())
+  body        String
+  authorId    String?
+  author      User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  enquiryId   String?
+  enquiry     Enquiry?   @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  siteVisitId String?
+  siteVisit   SiteVisit? @relation(fields: [siteVisitId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+}
+
+// ─────────────────────────────── Company profile (single row, edited in /admin/settings)
+
+model SiteSettings {
+  id                   Int      @id @default(1)
+  businessName         String   @default("V D Properties")
+  tagline              String   @default("BUILD BETTER FROM NOW")
+  phone                String?
+  whatsapp             String?
+  email                String?
+  addressLine          String?
+  city                 String?
+  state                String?
+  postalCode           String?
+  officeMapUrl         String?
+  businessHours        String?
+  /// Weekdays when site visits cannot be requested (0 = Sunday … 6 = Saturday).
+  visitClosedWeekdays  Int[]    @default([])
+  /// Specific dates (YYYY-MM-DD) when site visits cannot be requested, e.g. public holidays.
+  visitBlackoutDates   String[] @default([])
+  aboutIntro           String?
+  aboutApproach        String?
+  aboutValues          String?
+  aboutServiceArea     String?
+  aboutCustomers       String?
+  registrationInfo     String?
+  /// [{ label, url }]
+  socialLinks          Json     @default("[]")
+  /// [{ title, body }] — only services the company confirms it provides.
+  constructionServices Json     @default("[]")
+  /// [{ title, body }]
+  constructionStages   Json     @default("[]")
+  constructionNotes    String?
+  /// [{ title, body }] — genuine strengths shown in "Why V D Properties".
+  strengths            Json     @default("[]")
+  /// [{ question, answer }]
+  faqs                 Json     @default("[]")
+  /// PlotFit scoring weights, e.g. { budget: 30, location: 20, size: 15, house: 15, infrastructure: 10, completeness: 10 }
+  plotfitWeights       Json     @default("{}")
+  privacyPolicy        String?
+  termsConditions      String?
+  heroImageUrl         String?
+  heroImageAlt         String?
+  homesImageUrl        String?
+  homesImageAlt        String?
+  enquiryImageUrl      String?
+  enquiryImageAlt      String?
+  aboutImageUrl        String?
+  aboutImageAlt        String?
+  updatedAt            DateTime @updatedAt
+}
+
+// ─────────────────────────────── Property Twin
+
+model Developer {
+  id         String     @id @default(cuid())
+  name       String
+  contact    String?
+  notes      String?
+  /// Only authorised developers' listings may be published.
+  authorised Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  properties Property[]
+}
+
+/// The Property Passport: a document and verification register. Not a guarantee of title or approval.
+model PassportItem {
+  id              String            @id @default(cuid())
+  propertyId      String
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  documentType    String
+  status          PassportStatus    @default(NOT_PROVIDED)
+  documentId      String?
+  document        PropertyDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  reviewerId      String?
+  reviewer        User?             @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  /// Visible to customers when customerVisible is true.
+  publicNote      String?
+  /// Staff only.
+  privateNote     String?
+  customerVisible Boolean           @default(true)
+  sortOrder       Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([propertyId])
+}
+
+model PropertyActivity {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  kind       String
+  summary    String
+  /// Customer-visible entries appear on the Property Twin; others are staff-only.
+  isPublic   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId, createdAt])
+}
+
+// ─────────────────────────────── Property Studio & PlotFit
+
+/// Administrator-maintained rate card. Estimates always cite the card used.
+model CostAssumption {
+  id                  String      @id @default(cuid())
+  name                String
+  finish              FinishLevel
+  locationId          String?
+  constructionPerSqft Float
+  foundationPerSqft   Float       @default(0)
+  sitePreparation     Float       @default(0)
+  utilitiesConnection Float       @default(0)
+  registrationPct     Float       @default(0)
+  landscapingPerSqft  Float       @default(0)
+  parkingPerSlot      Float       @default(0)
+  contingencyPct      Float       @default(0)
+  source              String
+  effectiveDate       DateTime
+  /// Demonstration cards are labelled as such everywhere they're used.
+  isDemo              Boolean     @default(false)
+  active              Boolean     @default(true)
+  notes               String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+model SavedProperty {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, propertyId])
+}
+
+model PlanningScenario {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Null for an illustrative plot the customer described themselves.
+  propertyId        String?
+  property          Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  name              String
+  inputs            Json
+  /// Property facts as they were when saved, so later changes can be flagged.
+  plotSnapshot      Json
+  result            Json
+  costAssumptionId  String?
+  propertyUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model SavedSearch {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  criteria      Json
+  alertsEnabled Boolean   @default(false)
+  lastAlertAt   DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+// ─────────────────────────────── BuildTrace
+
+model BuildProject {
+  id             String           @id @default(cuid())
+  /// Human-readable project ID, e.g. BT-0003.
+  code           String           @unique
+  title          String
+  customerId     String
+  customer       User             @relation("BuildCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  propertyId     String?
+  property       Property?        @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  managerId      String?
+  manager        User?            @relation("BuildManager", fields: [managerId], references: [id], onDelete: SetNull)
+  contractorName String?
+  scope          String
+  contractValue  BigInt
+  plannedStart   DateTime         @db.Date
+  plannedEnd     DateTime         @db.Date
+  /// Agreement that authorises this project. Required before a project can exist.
+  agreementRef   String
+  agreementDate  DateTime         @db.Date
+  status         BuildStatus      @default(PLANNING)
+  customerNote   String?
+  isDemo         Boolean          @default(false)
+  milestones     BuildMilestone[]
+  updates        BuildUpdate[]
+  files          BuildFile[]
+  budgetLines    BudgetLine[]
+  payments       BuildPayment[]
+  changes        ChangeRequest[]
+  questions      BuildQuestion[]
+  handover       HandoverItem[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model BuildMilestone {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         BuildProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  sortOrder       Int
+  plannedDate     DateTime?       @db.Date
+  completedDate   DateTime?       @db.Date
+  status          MilestoneStatus @default(NOT_STARTED)
+  /// Strongest evidence recorded for completion.
+  evidence        EvidenceSource?
+  responsible     String?
+  notes           String?
+  issues          String?
+  customerVisible Boolean         @default(true)
+  updates         BuildUpdate[]
+  payments        BuildPayment[]
+
+  @@index([projectId, sortOrder])
+}
+
+model BuildUpdate {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         BuildProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId     String?
+  milestone       BuildMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  source          EvidenceSource
+  body            String
+  customerVisible Boolean         @default(true)
+  authorId        String?
+  author          User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  files           BuildFile[]
+  createdAt       DateTime        @default(now())
+}
+
+/// Progress photos and project documents. Always stored privately and served after an access check.
+model BuildFile {
+  id              String       @id @default(cuid())
+  projectId       String
+  project         BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  updateId        String?
+  update          BuildUpdate? @relation(fields: [updateId], references: [id], onDelete: SetNull)
+  kind            String
+  title           String
+  storageKey      String
+  customerVisible Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+}
+
+model BudgetLine {
+  id        String       @id @default(cuid())
+  projectId String
+  project   BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category  String
+  allowance BigInt
+  sortOrder Int          @default(0)
+}
+
+/// A payment exists only when staff record it against evidence. No online payment processing.
+model BuildPayment {
+  id           String          @id @default(cuid())
+  projectId    String
+  project      BuildProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId  String?
+  milestone    BuildMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  amount       BigInt
+  receivedOn   DateTime        @db.Date
+  reference    String
+  recordedById String?
+  createdAt    DateTime        @default(now())
+}
+
+model ChangeRequest {
+  id                 String       @id @default(cuid())
+  projectId          String
+  project            BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title              String
+  reason             String
+  /// Signed: positive increases the contract value.
+  costImpact         BigInt       @default(0)
+  scheduleImpactDays Int          @default(0)
+  status             ChangeStatus @default(PROPOSED)
+  requestedById      String?
+  decidedById        String?
+  decidedAt          DateTime?
+  decisionNote       String?
+  createdAt          DateTime     @default(now())
+}
+
+model BuildQuestion {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      User?        @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body        String
+  reply       String?
+  repliedById String?
+  repliedAt   DateTime?
+  createdAt   DateTime     @default(now())
+}
+
+model HandoverItem {
+  id        String       @id @default(cuid())
+  projectId String
+  project   BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String
+  required  Boolean      @default(true)
+  done      Boolean      @default(false)
+  doneAt    DateTime?
+  doneById  String?
+  notes     String?
+  sortOrder Int          @default(0)
+}
