@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/i18n/client";
+import { roomLabel } from "@/i18n/dict/studio";
 import type { PlotGeometry, Rect, RoomKind, StudioInputs, StudioResult } from "@/lib/studio/layout";
 import { northArrowAngle } from "@/lib/studio/layout";
 
@@ -25,11 +27,13 @@ function useFit(plot: PlotGeometry, box = 520, pad = 56) {
 const mono = "var(--font-plex-mono), ui-monospace, monospace";
 
 export function SitePlan({ plot, result, inputs }: { plot: PlotGeometry; result: StudioResult; inputs: StudioInputs }) {
+  const { t } = useI18n();
+  const dr = t.studio.drawings;
   const { X, Y, R, box } = useFit(plot);
   const fp = R(result.footprint);
   const env = R(result.envelope);
   return (
-    <svg viewBox={`0 0 ${box} ${box + 30}`} className="h-auto w-full" role="img" aria-label={`Conceptual site plan: ${Math.round(result.footprint.w)} by ${Math.round(result.footprint.h)} foot footprint on a ${plot.widthFt} by ${plot.depthFt} foot plot`}>
+    <svg viewBox={`0 0 ${box} ${box + 30}`} className="h-auto w-full" role="img" aria-label={dr.sitePlan(Math.round(result.footprint.w), Math.round(result.footprint.h), plot.widthFt, plot.depthFt)}>
       <defs>
         <pattern id="sp-garden" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
           <rect width="10" height="10" fill="#8CBF26" fillOpacity="0.28" />
@@ -43,19 +47,19 @@ export function SitePlan({ plot, result, inputs }: { plot: PlotGeometry; result:
       {/* Road */}
       <rect x="0" y={Y(0) + 8} width={box} height="26" fill="#0A3468" fillOpacity="0.1" />
       <path d={`M0 ${Y(0) + 21}H${box}`} stroke="#D4921C" strokeDasharray="12 8" />
-      <text x={box / 2} y={Y(0) + 50} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">ROAD / ACCESS</text>
+      <text x={box / 2} y={Y(0) + 50} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">{dr.road}</text>
       {/* Plot */}
       <rect x={X(0)} y={Y(plot.depthFt)} width={plot.widthFt * (X(1) - X(0))} height={plot.depthFt * (X(1) - X(0))} fill="#FDFAF3" stroke="#0A3468" strokeWidth="2" />
       {/* Buildable envelope */}
       <rect {...env} fill="none" stroke="#D4921C" strokeDasharray="6 5" strokeWidth="1.5" />
       {result.garden && <rect {...R(result.garden)} fill="url(#sp-garden)" />}
-      {result.garden && <text x={X(result.garden.x + result.garden.w / 2)} y={Y(result.garden.y + result.garden.h / 2) + 4} textAnchor="middle" fontFamily={mono} fontSize="10" fill="#0C3F19">GARDEN</text>}
+      {result.garden && <text x={X(result.garden.x + result.garden.w / 2)} y={Y(result.garden.y + result.garden.h / 2) + 4} textAnchor="middle" fontFamily={mono} fontSize="10" fill="#0C3F19">{dr.garden}</text>}
       {/* Footprint */}
       {result.footprintSqft > 0 && (
         <g style={{ transition: "all .4s" }}>
-          <rect {...fp} fill={inputs.style === "TRADITIONAL" ? "#E5401A" : "#0A3468"} fillOpacity="0.85" />
+          <rect {...fp} rx="3" fill={inputs.style === "TRADITIONAL" ? "#E5401A" : "#0A3468"} fillOpacity="0.85" className="studio-morph" />
           {result.courtyard && <rect {...R(result.courtyard)} fill="url(#sp-garden)" stroke="#FDFAF3" />}
-          <text x={fp.x + fp.width / 2} y={fp.y + fp.height / 2 - 4} textAnchor="middle" fill="#FDFAF3" fontFamily={mono} fontSize="11">HOUSE · {inputs.floors} FLOOR{inputs.floors > 1 ? "S" : ""}</text>
+          <text x={fp.x + fp.width / 2} y={fp.y + fp.height / 2 - 4} textAnchor="middle" fill="#FDFAF3" fontFamily={mono} fontSize="11">{dr.house(inputs.floors)}</text>
           <text x={fp.x + fp.width / 2} y={fp.y + fp.height / 2 + 12} textAnchor="middle" fill="#FDFAF3" fontFamily={mono} fontSize="10">{Math.round(result.footprint.w)}′ × {Math.round(result.footprint.h)}′</text>
         </g>
       )}
@@ -73,8 +77,8 @@ export function SitePlan({ plot, result, inputs }: { plot: PlotGeometry; result:
       <g fontFamily={mono} fontSize="11" fill="#0A3468">
         <text x={(X(0) + X(plot.widthFt)) / 2} y={Y(plot.depthFt) - 22} textAnchor="middle">{plot.widthFt} ft</text>
         <text x={X(plot.widthFt) + 30} y={(Y(0) + Y(plot.depthFt)) / 2} textAnchor="middle" transform={`rotate(90 ${X(plot.widthFt) + 30} ${(Y(0) + Y(plot.depthFt)) / 2})`}>{plot.depthFt} ft</text>
-        <text x={X(0) + 4} y={Y(0) - 4} fontSize="9" fill="#9A6410">front {plot.setbacks.front}′</text>
-        <text x={X(0) + 4} y={Y(plot.depthFt) + 12} fontSize="9" fill="#9A6410">rear {plot.setbacks.rear}′</text>
+        <text x={X(0) + 4} y={Y(0) - 4} fontSize="9" fill="#9A6410">{dr.front(plot.setbacks.front)}</text>
+        <text x={X(0) + 4} y={Y(plot.depthFt) + 12} fontSize="9" fill="#9A6410">{dr.rear(plot.setbacks.rear)}</text>
       </g>
       {plot.frontBearing !== null && (
         <g transform={`translate(${box - 30} 30) rotate(${northArrowAngle(plot.frontBearing)})`}>
@@ -87,6 +91,8 @@ export function SitePlan({ plot, result, inputs }: { plot: PlotGeometry; result:
 }
 
 export function FloorPlan({ plot, result, level }: { plot: PlotGeometry; result: StudioResult; level: number }) {
+  const { t } = useI18n();
+  const dr = t.studio.drawings;
   const floor = result.floors[level];
   if (!floor) return null;
   const f = result.footprint;
@@ -97,16 +103,16 @@ export function FloorPlan({ plot, result, level }: { plot: PlotGeometry; result:
   const oy = pad + (box - pad * 2 - f.h * s) / 2;
   const R = (r: Rect) => ({ x: ox + (r.x - f.x) * s, y: oy + (f.h - (r.y - f.y) - r.h) * s, width: r.w * s, height: r.h * s });
   return (
-    <svg viewBox={`0 0 ${box} ${box}`} className="h-auto w-full" role="img" aria-label={`${floor.label} zoning: ${floor.rooms.map((r) => r.name).join(", ")}`}>
+    <svg viewBox={`0 0 ${box} ${box}`} className="h-auto w-full" role="img" aria-label={dr.zoning(t.studio.planner.floorName(floor.level), floor.rooms.map((r) => roomLabel(t.studio.rooms, r.name)).join(", "))}>
       <rect x={ox} y={oy} width={f.w * s} height={f.h * s} fill="#FDFAF3" stroke="#0A3468" strokeWidth="5" />
       {floor.rooms.map((room) => {
         const r = R(room);
         const big = r.width > 60 && r.height > 34;
         return (
           <g key={room.name}>
-            <rect {...r} fill={ROOM_FILL[room.kind]} fillOpacity="0.55" stroke="#0A3468" strokeWidth="1.5" />
-            <text x={r.x + r.width / 2} y={r.y + r.height / 2 - (big ? 3 : 0)} textAnchor="middle" fontFamily={mono} fontSize={big ? 11 : 8} fill="#121C27">{room.name.toUpperCase()}</text>
-            {big && <text x={r.x + r.width / 2} y={r.y + r.height / 2 + 12} textAnchor="middle" fontFamily={mono} fontSize="9" fill="#565F69">{room.areaSqft} sq ft</text>}
+            <rect {...r} fill={ROOM_FILL[room.kind]} fillOpacity="0.55" stroke="#0A3468" strokeWidth="1.5" className="studio-morph" />
+            <text x={r.x + r.width / 2} y={r.y + r.height / 2 - (big ? 3 : 0)} textAnchor="middle" fontFamily={mono} fontSize={big ? 11 : 8} fill="#121C27">{roomLabel(t.studio.rooms, room.name).toLocaleUpperCase()}</text>
+            {big && <text x={r.x + r.width / 2} y={r.y + r.height / 2 + 12} textAnchor="middle" fontFamily={mono} fontSize="9" fill="#565F69">{room.areaSqft} {t.units.sqft}</text>}
           </g>
         );
       })}
@@ -115,18 +121,20 @@ export function FloorPlan({ plot, result, level }: { plot: PlotGeometry; result:
         return (
           <g key={i}>
             <rect {...r} fill="#FDFAF3" stroke="#121C27" strokeDasharray="4 3" />
-            <text x={r.x + r.width / 2} y={r.y + r.height / 2} textAnchor="middle" fontFamily={mono} fontSize="9">PARKING</text>
+            <text x={r.x + r.width / 2} y={r.y + r.height / 2} textAnchor="middle" fontFamily={mono} fontSize="9">{dr.parking}</text>
           </g>
         );
       })}
       {result.courtyard && <rect {...R(result.courtyard)} fill="#8CBF26" fillOpacity="0.35" stroke="#2C7A1E" />}
-      <text x={box / 2} y={box - 6} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">ROAD SIDE ↓ · {plot.widthFt}′ FRONTAGE</text>
+      <text x={box / 2} y={box - 6} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">{dr.roadSide(plot.widthFt)}</text>
     </svg>
   );
 }
 
 /** Axonometric massing drawn from the actual footprint, floors and style. */
 export function Massing({ plot, result, inputs }: { plot: PlotGeometry; result: StudioResult; inputs: StudioInputs }) {
+  const { t } = useI18n();
+  const dr = t.studio.drawings;
   const box = 560;
   const floorH = 10.5;
   const cos = Math.cos(Math.PI / 6);
@@ -148,7 +156,7 @@ export function Massing({ plot, result, inputs }: { plot: PlotGeometry; result: 
   const top = inputs.floors * floorH;
 
   return (
-    <svg viewBox={`0 0 ${box} ${box}`} className="h-auto w-full" role="img" aria-label={`Massing view: ${inputs.floors}-storey ${inputs.style.toLowerCase()} house on the plot`}>
+    <svg viewBox={`0 0 ${box} ${box}`} className="h-auto w-full" role="img" aria-label={dr.massing(inputs.floors, t.studio.planner.styles[inputs.style].toLocaleLowerCase())}>
       <defs>
         <linearGradient id="ms-sky" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#FDB668" stopOpacity="0.35" />
@@ -194,7 +202,7 @@ export function Massing({ plot, result, inputs }: { plot: PlotGeometry; result: 
           </>
         ))}
       {result.parkingInEnvelope && result.parking.map((p, i) => <polygon key={`pk${i}`} points={poly([P(p.x, p.y, 0.1), P(p.x + p.w, p.y, 0.1), P(p.x + p.w, p.y, floorH - 0.5), P(p.x, p.y, floorH - 0.5)])} fill="#121C27" fillOpacity="0.55" />)}
-      <text x={box / 2} y={box - 10} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">CONCEPT MASSING · NOT TO SCALE FOR CONSTRUCTION</text>
+      <text x={box / 2} y={box - 10} textAnchor="middle" fontFamily={mono} fontSize="10" letterSpacing="2" fill="#565F69">{dr.massingNote}</text>
     </svg>
   );
 }

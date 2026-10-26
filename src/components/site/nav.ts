@@ -1,28 +1,35 @@
-export type NavItem = { label: string; href: string; children?: { label: string; href: string; note?: string }[] };
+import type { Dict } from "@/i18n/dict";
 
-export const NAV: NavItem[] = [
-  {
-    label: "Buy",
-    href: "/properties",
-    children: [
-      { label: "All properties", href: "/properties", note: "Search every listing" },
-      { label: "Residential plots & land", href: "/plots", note: "Plots, parcels and layouts" },
-      { label: "Houses & villas", href: "/houses", note: "Completed homes" },
-      { label: "Ongoing projects", href: "/projects/ongoing", note: "Developments in progress" },
-      { label: "Completed projects", href: "/projects/completed", note: "Delivered developments" },
-    ],
-  },
-  { label: "PlotFit", href: "/plotfit" },
-  { label: "Property Twin", href: "/twin" },
-  { label: "Property Studio", href: "/studio" },
-  {
-    label: "Build",
-    href: "/construction",
-    children: [
-      { label: "Construction services", href: "/construction", note: "Build a home with us" },
-      { label: "BuildTrace", href: "/buildtrace", note: "Track an agreed construction project" },
-    ],
-  },
-  { label: "About", href: "/about" },
-  { label: "Contact", href: "/contact" },
-];
+export type NavItem = { key: string; label: string; href: string; children?: { label: string; href: string; note?: string }[] };
+
+export function buildNav(t: Dict): NavItem[] {
+  const n = t.nav;
+  return [
+    {
+      key: "buy",
+      label: n.buy,
+      href: "/properties",
+      children: [
+        { label: n.allProperties, href: "/properties", note: n.allPropertiesNote },
+        { label: n.plots, href: "/plots", note: n.plotsNote },
+        { label: n.houses, href: "/houses", note: n.housesNote },
+        { label: n.ongoing, href: "/projects/ongoing", note: n.ongoingNote },
+        { label: n.completed, href: "/projects/completed", note: n.completedNote },
+      ],
+    },
+    { key: "plotfit", label: n.plotfit, href: "/plotfit" },
+    { key: "twin", label: n.twin, href: "/twin" },
+    { key: "studio", label: n.studio, href: "/studio" },
+    {
+      key: "build",
+      label: n.build,
+      href: "/construction",
+      children: [
+        { label: n.construction, href: "/construction", note: n.constructionNote },
+        { label: n.buildtrace, href: "/buildtrace", note: n.buildtraceNote },
+      ],
+    },
+    { key: "about", label: n.about, href: "/about" },
+    { key: "contact", label: n.contact, href: "/contact" },
+  ];
+}

@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/i18n/Link";
+import { useI18n } from "@/i18n/client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { saveScenario, type ScenarioPayload } from "@/app/account/_actions/customer";
-import { formatPrice, formatRupeesFull } from "@/lib/format";
 import { estimateBudget, type Basis, type CostCard, type LineKey } from "@/lib/studio/estimate";
 import { DEFAULT_INPUTS, generateLayout, HOUSE_STYLES, type HouseStyle, type PlotGeometry, type StudioInputs } from "@/lib/studio/layout";
 import { ConsultForm } from "./ConsultForm";
@@ -29,7 +29,6 @@ const BASIS_STYLE: Record<Basis, string> = {
   USER: "bg-emerald text-ivory",
   MISSING: "bg-terracotta/15 text-terracotta-deep",
 };
-const BASIS_LABEL: Record<Basis, string> = { QUOTED: "Quoted", ESTIMATED: "Estimated", USER: "Your figure", MISSING: "Missing" };
 
 function readInputs(sp: URLSearchParams): StudioInputs {
   const n = (k: string, d: number) => (sp.has(k) && Number.isFinite(Number(sp.get(k))) ? Number(sp.get(k)) : d);
@@ -64,6 +63,8 @@ export function StudioPlanner({
   businessName: string;
 }) {
   const router = useRouter();
+  const { t, f } = useI18n();
+  const pl = t.studio.planner;
   const pathname = usePathname();
   const params = useSearchParams();
   const [inputs, setInputs] = useState<StudioInputs>(() => readInputs(new URLSearchParams(params.toString())));
@@ -72,7 +73,7 @@ export function StudioPlanner({
   const [overrides, setOverrides] = useState<Partial<Record<LineKey, number>>>(() => (initialLandPrice ? { land: initialLandPrice } : {}));
   const [view, setView] = useState<"site" | "floors" | "massing">("site");
   const [level, setLevel] = useState(0);
-  const [name, setName] = useState(property ? `${property.referenceCode} · ${inputs.bedrooms} bed concept` : "My illustrative plan");
+  const [name, setName] = useState(pl.defaultName(property?.referenceCode ?? null, inputs.bedrooms));
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, startSave] = useTransition();
   const [consult, setConsult] = useState(false);
@@ -139,62 +140,71 @@ export function StudioPlanner({
   }
 
   const budgetDiff = inputs.targetBudget ? inputs.targetBudget - estimate.total : null;
-  const summary = `${inputs.bedrooms}-bed, ${inputs.floors}-floor ${HOUSE_STYLES[inputs.style].toLowerCase()} concept, about ${result.achievedBuiltUpSqft} sq ft, on ${property ? `${property.referenceCode} (${plot.widthFt}×${plot.depthFt} ft)` : `an illustrative ${plot.widthFt}×${plot.depthFt} ft plot`}. Estimated total ${formatRupeesFull(estimate.total)}${estimate.complete ? "" : " (incomplete)"}.`;
+  const summary = pl.summary(
+    inputs.bedrooms,
+    inputs.floors,
+    pl.styles[inputs.style],
+    f.area(result.achievedBuiltUpSqft),
+    property ? pl.plotRef(property.referenceCode, plot.widthFt, plot.depthFt) : pl.plotIll(plot.widthFt, plot.depthFt),
+    f.rupees(estimate.total),
+    estimate.complete,
+  );
+  const sqft = (n: number) => f.area(n);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[22rem_1fr]">
       {/* ── Controls */}
-      <aside className="space-y-5 print:hidden" aria-label="Studio controls">
-        <section className="border border-line bg-white p-5">
-          <h2 className="annot text-emerald">The plot</h2>
+      <aside className="space-y-5 print:hidden" aria-label={pl.controls}>
+        <section className="surface p-5">
+          <h2 className="annot text-emerald">{pl.plot}</h2>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-slate">Frontage</dt><dd className="font-semibold">{plot.widthFt} ft <SourceTag s={plot.illustrative ? "USER" : "RECORD"} /></dd></div>
-            <div><dt className="text-slate">Depth</dt><dd className="font-semibold">{plot.depthFt} ft <SourceTag s={plot.illustrative ? "USER" : "RECORD"} /></dd></div>
-            <div className="col-span-2"><dt className="text-slate">Plot area</dt><dd className="font-semibold">{Math.round(result.plotAreaSqft).toLocaleString("en-IN")} sq ft</dd></div>
+            <div><dt className="text-slate">{pl.frontage}</dt><dd className="font-semibold">{plot.widthFt} ft <SourceTag s={plot.illustrative ? "USER" : "RECORD"} /></dd></div>
+            <div><dt className="text-slate">{pl.depth}</dt><dd className="font-semibold">{plot.depthFt} ft <SourceTag s={plot.illustrative ? "USER" : "RECORD"} /></dd></div>
+            <div className="col-span-2"><dt className="text-slate">{pl.plotArea}</dt><dd className="font-semibold">{sqft(result.plotAreaSqft)}</dd></div>
           </dl>
           <fieldset className="mt-4">
-            <legend className="field-label">Setbacks (ft) <SourceTag s={plot.setbackSource} /></legend>
+            <legend className="field-label">{pl.setbacks} <SourceTag s={plot.setbackSource} /></legend>
             <div className="grid grid-cols-3 gap-2">
               {(["front", "rear", "side"] as const).map((k) => (
                 <label key={k} className="text-xs text-slate">
-                  {k}
+                  {pl.sides[k]}
                   <input type="number" min={0} max={50} step={0.5} value={setbacks[k]} disabled={!setbacksEditable} onChange={(e) => setSetbacks((sb) => ({ ...sb, [k]: Math.max(0, Number(e.target.value) || 0) }))} className="field mt-1 min-h-9 py-1 text-sm disabled:bg-paper" />
                 </label>
               ))}
             </div>
-            {setbacksEditable && <p className="field-hint">Not on record — these are starting assumptions. Enter your local rules.</p>}
+            {setbacksEditable && <p className="field-hint">{pl.setbacksHint}</p>}
           </fieldset>
           <label className="mt-4 block text-sm">
-            <span className="field-label">Max ground coverage (%) <SourceTag s={plot.coverageSource ?? "MISSING"} /></span>
-            <input type="number" min={10} max={100} value={coverage ?? ""} disabled={!coverageEditable} placeholder="Not on record" onChange={(e) => setCoverage(e.target.value ? Number(e.target.value) : null)} className="field min-h-9 py-1 text-sm disabled:bg-paper" />
+            <span className="field-label">{pl.coverage} <SourceTag s={plot.coverageSource ?? "MISSING"} /></span>
+            <input type="number" min={10} max={100} value={coverage ?? ""} disabled={!coverageEditable} placeholder={pl.notOnRecord} onChange={(e) => setCoverage(e.target.value ? Number(e.target.value) : null)} className="field min-h-9 py-1 text-sm disabled:bg-paper" />
           </label>
-          {property?.constraints && <p className="mt-3 border-l-4 border-gold bg-paper p-2 text-xs">Known constraints: {property.constraints}</p>}
+          {property?.constraints && <p className="mt-3 rounded-xl border-l-4 border-gold bg-paper p-2 text-xs">{pl.constraints(property.constraints)}</p>}
         </section>
 
-        <section className="border border-line bg-white p-5">
-          <h2 className="annot text-emerald">Your home</h2>
+        <section className="surface p-5">
+          <h2 className="annot text-emerald">{pl.home}</h2>
           <div className="mt-3 space-y-4">
-            <Stepper label="Bedrooms" value={inputs.bedrooms} min={1} max={6} onChange={(v) => upd("bedrooms", v)} />
-            <Segmented label="Floors" value={String(inputs.floors)} options={[["1", "1"], ["2", "2"], ["3", "3"]]} onChange={(v) => upd("floors", Number(v))} />
+            <Stepper label={pl.bedrooms} value={inputs.bedrooms} min={1} max={6} onChange={(v) => upd("bedrooms", v)} />
+            <Segmented label={pl.floors} name="floors" value={String(inputs.floors)} options={[["1", "1"], ["2", "2"], ["3", "3"]]} onChange={(v) => upd("floors", Number(v))} />
             <div>
-              <label className="field-label" htmlFor="st-area">Built-up area: {inputs.builtUpSqft.toLocaleString("en-IN")} sq ft</label>
+              <label className="field-label" htmlFor="st-area">{pl.builtUp(sqft(inputs.builtUpSqft))}</label>
               <input id="st-area" type="range" min={500} max={6000} step={50} value={inputs.builtUpSqft} onChange={(e) => upd("builtUpSqft", Number(e.target.value))} className="w-full accent-emerald" />
             </div>
             <label className="block">
-              <span className="field-label">House style</span>
+              <span className="field-label">{pl.style}</span>
               <select value={inputs.style} onChange={(e) => upd("style", e.target.value as HouseStyle)} className="field min-h-10 py-1.5 text-sm">
-                {Object.entries(HOUSE_STYLES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                {(Object.keys(HOUSE_STYLES) as HouseStyle[]).map((k) => <option key={k} value={k}>{pl.styles[k]}</option>)}
               </select>
             </label>
-            <Stepper label="Parking spaces" value={inputs.parkingSlots} min={0} max={4} onChange={(v) => upd("parkingSlots", v)} />
+            <Stepper label={pl.parking} value={inputs.parkingSlots} min={0} max={4} onChange={(v) => upd("parkingSlots", v)} />
             <div className="flex flex-wrap gap-4">
-              <Toggle label="Garden" checked={inputs.garden} onChange={(v) => upd("garden", v)} />
-              <Toggle label="Study / home office" checked={inputs.study} onChange={(v) => upd("study", v)} />
+              <Toggle label={pl.garden} checked={inputs.garden} onChange={(v) => upd("garden", v)} />
+              <Toggle label={pl.study} checked={inputs.study} onChange={(v) => upd("study", v)} />
             </div>
-            <Segmented label="Construction finish" value={inputs.finish} options={[["BASIC", "Basic"], ["STANDARD", "Standard"], ["PREMIUM", "Premium"]]} onChange={(v) => upd("finish", v as StudioInputs["finish"])} />
+            <Segmented label={pl.finish} name="finish" value={inputs.finish} options={(["BASIC", "STANDARD", "PREMIUM"] as const).map((k) => [k, pl.finishes[k]])} onChange={(v) => upd("finish", v as StudioInputs["finish"])} />
             <label className="block">
-              <span className="field-label">Target overall budget (₹)</span>
-              <input type="number" min={0} step={100000} value={inputs.targetBudget ?? ""} placeholder="Optional" onChange={(e) => upd("targetBudget", e.target.value ? Number(e.target.value) : null)} className="field min-h-10 py-1.5 text-sm" />
+              <span className="field-label">{pl.target}</span>
+              <input type="number" min={0} step={100000} value={inputs.targetBudget ?? ""} placeholder={t.studio.index.optional} onChange={(e) => upd("targetBudget", e.target.value ? Number(e.target.value) : null)} className="field min-h-10 py-1.5 text-sm" />
             </label>
           </div>
         </section>
@@ -202,12 +212,12 @@ export function StudioPlanner({
 
       {/* ── Drawing board */}
       <div className="min-w-0 space-y-6">
-        <section className="border border-line bg-white" aria-labelledby="board-h">
+        <section className="surface overflow-hidden" aria-labelledby="board-h">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 print:hidden">
-            <h2 id="board-h" className="annot text-navy">Concept drawing</h2>
-            <div role="tablist" aria-label="Drawing view" className="flex border border-line text-sm">
-              {([["site", "Site plan"], ["floors", "Floor plans"], ["massing", "Massing"]] as const).map(([k, l]) => (
-                <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`px-3 py-1.5 ${view === k ? "bg-forest text-ivory" : "hover:bg-paper"}`}>{l}</button>
+            <h2 id="board-h" className="annot text-navy">{pl.drawing}</h2>
+            <div role="tablist" aria-label={pl.viewLabel} className="liquid-seg text-sm" style={{ "--n": 3, "--at": ["site", "floors", "massing"].indexOf(view) } as React.CSSProperties}>
+              {(["site", "floors", "massing"] as const).map((k) => (
+                <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className="liquid-seg-item">{pl.views[k]}</button>
               ))}
             </div>
           </div>
@@ -217,72 +227,72 @@ export function StudioPlanner({
               {view === "floors" && (
                 <>
                   <div className="mb-2 flex gap-2 text-sm">
-                    {result.floors.map((f) => (
-                      <button key={f.level} type="button" onClick={() => setLevel(f.level)} aria-pressed={level0 === f.level} className={`border px-3 py-1 ${level0 === f.level ? "border-forest bg-forest text-ivory" : "border-line"}`}>{f.label}</button>
+                    {result.floors.map((fl) => (
+                      <button key={fl.level} type="button" onClick={() => setLevel(fl.level)} aria-pressed={level0 === fl.level} className={`liquid-tile px-3 py-1 ${level0 === fl.level ? "is-on" : ""}`}>{pl.floorName(fl.level)}</button>
                     ))}
                   </div>
-                  {result.floors.length ? <FloorPlan plot={plot} result={result} level={level0} /> : <p className="p-10 text-center text-slate">No floor plan — the concept doesn't fit.</p>}
+                  {result.floors.length ? <FloorPlan plot={plot} result={result} level={level0} /> : <p className="p-10 text-center text-slate">{pl.noFloor}</p>}
                 </>
               )}
               {view === "massing" && <Massing plot={plot} result={result} inputs={inputs} />}
             </div>
             <dl className="grid grid-cols-2 content-start gap-x-4 gap-y-3 border-t border-line bg-paper p-4 text-sm lg:grid-cols-1 lg:border-l lg:border-t-0">
-              <Fact k="Built-up achieved" v={`${result.achievedBuiltUpSqft.toLocaleString("en-IN")} sq ft`} />
-              <Fact k="Requested" v={`${result.requestedBuiltUpSqft.toLocaleString("en-IN")} sq ft`} />
-              <Fact k="Footprint" v={`${result.footprintSqft.toLocaleString("en-IN")} sq ft`} />
-              <Fact k="Ground coverage" v={`${result.coveragePct}%`} />
-              <Fact k="Floor area ratio" v={String(result.floorAreaRatio)} />
-              <Fact k="Max with these choices" v={`${Math.max(0, result.maxBuiltUpSqft).toLocaleString("en-IN")} sq ft`} />
-              <Fact k="Garden" v={result.gardenSqft ? `${result.gardenSqft.toLocaleString("en-IN")} sq ft` : "—"} />
-              <Fact k="Parking" v={result.parking.length ? `${result.parking.length} ${result.parkingInEnvelope ? "covered" : "open"}` : "—"} />
+              <Fact k={pl.facts.achieved} v={sqft(result.achievedBuiltUpSqft)} />
+              <Fact k={pl.facts.requested} v={sqft(result.requestedBuiltUpSqft)} />
+              <Fact k={pl.facts.footprint} v={sqft(result.footprintSqft)} />
+              <Fact k={pl.facts.coverage} v={`${result.coveragePct}%`} />
+              <Fact k={pl.facts.far} v={String(result.floorAreaRatio)} />
+              <Fact k={pl.facts.max} v={sqft(Math.max(0, result.maxBuiltUpSqft))} />
+              <Fact k={pl.facts.garden} v={result.gardenSqft ? sqft(result.gardenSqft) : "—"} />
+              <Fact k={pl.facts.parking} v={result.parking.length ? `${result.parking.length} ${result.parkingInEnvelope ? pl.facts.covered : pl.facts.open}` : "—"} />
             </dl>
           </div>
-          <ul className="space-y-1.5 border-t border-line p-4 text-sm" aria-label="Notes on this concept">
-            <li className={`font-semibold ${result.feasible ? "text-emerald" : "text-terracotta-deep"}`}>{result.feasible ? "✓ The concept fits within the plot limits used." : "✕ The concept doesn't fit within the limits used."}</li>
+          <ul className="space-y-1.5 border-t border-line p-4 text-sm" aria-label={pl.notes}>
+            <li className={`font-semibold ${result.feasible ? "text-emerald" : "text-terracotta-deep"}`}>{result.feasible ? pl.fits : pl.noFit}</li>
             {result.warnings.map((w, i) => (
               <li key={i} className={w.level === "blocker" ? "text-terracotta-deep" : w.level === "caution" ? "text-gold-deep" : "text-slate"}>
-                {w.level === "blocker" ? "✕" : w.level === "caution" ? "!" : "·"} {w.text}
+                {w.level === "blocker" ? "✕" : w.level === "caution" ? "!" : "·"} {w.text ?? t.studio.warnings[w.code](w.params ?? {})}
               </li>
             ))}
-            <li className="text-slate">· This is a preliminary concept generated from your choices — not an approved architectural drawing or a construction-ready plan. A professional review is required before any design decisions.</li>
+            <li className="text-slate">· {pl.disclaimer}</li>
           </ul>
         </section>
 
         {/* ── Budget */}
-        <section className="border border-line bg-white" aria-labelledby="budget-h">
+        <section className="surface overflow-hidden" aria-labelledby="budget-h">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-3">
-            <h2 id="budget-h" className="annot text-navy">Project budget</h2>
+            <h2 id="budget-h" className="annot text-navy">{pl.budget}</h2>
             <p className="text-xs text-slate">
               {card ? (
-                <>Rates: <strong>{card.name}</strong> · {card.source} · effective {card.effectiveDate}{card.isDemo && <span className="ml-1 text-terracotta-deep">(demonstration rates — not market data)</span>}</>
+                <>{pl.rates} <strong>{card.name}</strong> · {card.source} · {pl.effective} {card.effectiveDate}{card.isDemo && <span className="ml-1 text-terracotta-deep">{pl.demo}</span>}</>
               ) : (
-                <span className="text-terracotta-deep">No rate card is configured for a {inputs.finish.toLowerCase()} finish. Enter your own figures below.</span>
+                <span className="text-terracotta-deep">{pl.noCard(pl.finishes[inputs.finish].toLocaleLowerCase())}</span>
               )}
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-left text-sm">
               <thead className="text-xs uppercase tracking-wider text-slate">
-                <tr><th scope="col" className="px-4 py-2">Item</th><th scope="col" className="px-4 py-2">Basis</th><th scope="col" className="px-4 py-2 text-right">Amount (₹)</th></tr>
+                <tr><th scope="col" className="px-4 py-2">{pl.cols.item}</th><th scope="col" className="px-4 py-2">{pl.cols.basis}</th><th scope="col" className="px-4 py-2 text-right">{pl.cols.amount}</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {estimate.lines.map((l) => (
                   <tr key={l.key}>
-                    <td className="px-4 py-2.5"><span className="font-medium">{l.label}</span><span className="block text-xs text-slate">{l.detail}</span></td>
-                    <td className="px-4 py-2.5"><span className={`annot-plain inline-block px-2 py-0.5 text-[0.6rem] ${BASIS_STYLE[l.basis]}`}>{BASIS_LABEL[l.basis]}</span></td>
+                    <td className="px-4 py-2.5"><span className="font-medium">{t.studio.lines[l.key]}</span><span className="block text-xs text-slate">{t.studio.detail[l.detail](l.params ?? {})}</span></td>
+                    <td className="px-4 py-2.5"><span className={`annot-plain inline-block rounded-full px-2.5 py-0.5 text-[0.6rem] ${BASIS_STYLE[l.basis]}`}>{pl.basis[l.basis]}</span></td>
                     <td className="px-4 py-2.5 text-right">
                       <input
                         type="number"
                         min={0}
                         step={1000}
-                        aria-label={`${l.label} amount`}
+                        aria-label={pl.amountLabel(t.studio.lines[l.key])}
                         value={overrides[l.key] ?? l.amount ?? ""}
-                        placeholder="Enter"
+                        placeholder={pl.enter}
                         onChange={(e) => setOverrides((o) => ({ ...o, [l.key]: e.target.value === "" ? undefined : Number(e.target.value) }))}
                         className="field ml-auto min-h-9 w-36 py-1 text-right text-sm print:border-0"
                       />
                       {overrides[l.key] !== undefined && (
-                        <button type="button" className="mt-1 block w-full text-right text-xs text-slate underline print:hidden" onClick={() => setOverrides((o) => ({ ...o, [l.key]: undefined }))}>Reset</button>
+                        <button type="button" className="mt-1 block w-full text-right text-xs text-slate underline print:hidden" onClick={() => setOverrides((o) => ({ ...o, [l.key]: undefined }))}>{pl.reset}</button>
                       )}
                     </td>
                   </tr>
@@ -290,30 +300,30 @@ export function StudioPlanner({
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-navy">
-                  <td className="px-4 py-3 font-serif text-xl text-navy" colSpan={2}>Estimated total project cost{!estimate.complete && <span className="block font-sans text-xs text-terracotta-deep">Incomplete — missing: {estimate.missing.join(", ")}</span>}</td>
-                  <td className="px-4 py-3 text-right font-serif text-2xl text-navy">{formatPrice(estimate.total)}</td>
+                  <td className="px-4 py-3 font-serif text-xl text-navy" colSpan={2}>{pl.total}{!estimate.complete && <span className="block font-sans text-xs text-terracotta-deep">{pl.incomplete(estimate.missing.map((k) => t.studio.lines[k].toLocaleLowerCase()).join(", "))}</span>}</td>
+                  <td className="px-4 py-3 text-right font-serif text-2xl text-navy">{f.price(estimate.total)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
           {budgetDiff !== null && (
             <div className="border-t border-line p-4">
-              <div className="flex justify-between text-sm"><span>Against your target of {formatPrice(inputs.targetBudget!)}</span><strong className={budgetDiff >= 0 ? "text-emerald" : "text-terracotta-deep"}>{budgetDiff >= 0 ? `${formatPrice(budgetDiff)} under` : `${formatPrice(-budgetDiff)} over`}</strong></div>
-              <div className="mt-2 h-2 bg-line" role="img" aria-label="Estimate as a share of target budget">
-                <div className={`h-full ${budgetDiff >= 0 ? "bg-emerald" : "bg-terracotta"}`} style={{ width: `${Math.min(100, (estimate.total / inputs.targetBudget!) * 100)}%` }} />
+              <div className="flex justify-between text-sm"><span>{pl.against(f.price(inputs.targetBudget!))}</span><strong className={budgetDiff >= 0 ? "text-emerald" : "text-terracotta-deep"}>{budgetDiff >= 0 ? pl.under(f.price(budgetDiff)) : pl.over(f.price(-budgetDiff))}</strong></div>
+              <div className="liquid-track mt-2" role="img" aria-label={pl.shareLabel}>
+                <div className={budgetDiff >= 0 ? "liquid-track-fill" : "h-full rounded-full bg-terracotta transition-[width] duration-700"} style={{ width: `${Math.min(100, (estimate.total / inputs.targetBudget!) * 100)}%` }} />
               </div>
             </div>
           )}
-          <p className="border-t border-line p-4 text-xs text-slate">Estimates use the rate card shown and your own figures. They are not a quotation, and the final project price may differ. Quoted amounts come from the listing; estimated amounts from the rate card; “Your figure” lines are amounts you entered.</p>
+          <p className="border-t border-line p-4 text-xs text-slate">{pl.estimateNote}</p>
         </section>
 
         {/* ── Actions */}
-        <section className="flex flex-col gap-4 border border-navy bg-navy p-5 text-ivory print:hidden lg:flex-row lg:items-end lg:justify-between">
+        <section className="flex flex-col gap-4 rounded-[1rem] bg-navy p-5 text-ivory print:hidden lg:flex-row lg:items-end lg:justify-between">
           <div className="flex-1">
             {signedIn ? (
               <div className="flex flex-wrap items-end gap-3">
                 <label className="min-w-[14rem] flex-1">
-                  <span className="annot-plain text-gold-light">Scenario name</span>
+                  <span className="annot-plain text-gold-light">{pl.scenarioName}</span>
                   <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} className="field mt-1 min-h-10 py-1.5 text-sm" />
                 </label>
                 <button
@@ -328,26 +338,26 @@ export function StudioPlanner({
                     })
                   }
                 >
-                  {saving ? "Saving…" : "Save scenario"}
+                  {saving ? pl.saving : pl.save}
                 </button>
-                <Link href="/account/compare" className="btn btn-outline min-h-10">Compare saved</Link>
+                <Link href="/account/compare" className="btn btn-outline min-h-10">{pl.compareSaved}</Link>
               </div>
             ) : (
               <p className="text-sm text-ivory/85">
-                <Link href={`/account/login?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-gold-light underline">Sign in</Link> or{" "}
-                <Link href={`/account/register?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-gold-light underline">create an account</Link> to save and compare scenarios. Your current choices are kept in the link.
+                <Link href={`/account/login?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-gold-light underline">{pl.signInA}</Link> {pl.signInOr}{" "}
+                <Link href={`/account/register?next=${encodeURIComponent(nextPath)}`} className="font-semibold text-gold-light underline">{pl.signInB}</Link> {pl.signInTail}
               </p>
             )}
             {saveMsg && <p role="status" className={`mt-2 text-sm ${saveMsg.ok ? "text-leaf" : "text-sun-light"}`}>{saveMsg.text}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            {property && <Link href={`/compare?p=${property.slug}`} className="btn btn-outline min-h-10">Compare This Plot</Link>}
-            <button type="button" onClick={() => window.print()} className="btn btn-outline min-h-10">Print summary</button>
-            <button type="button" onClick={() => setConsult((c) => !c)} aria-expanded={consult} className="btn btn-gold min-h-10">Request a Professional Consultation</button>
+            {property && <Link href={`/compare?p=${property.slug}`} className="btn btn-outline min-h-10">{pl.comparePlot}</Link>}
+            <button type="button" onClick={() => window.print()} className="btn btn-outline min-h-10">{pl.print}</button>
+            <button type="button" onClick={() => setConsult((c) => !c)} aria-expanded={consult} className="btn btn-gold min-h-10">{pl.consult}</button>
           </div>
         </section>
         {consult && (
-          <section className="border border-line bg-white p-5 print:hidden">
+          <section className="surface p-5 print:hidden">
             <ConsultForm propertyId={property?.id} summary={summary} builtUp={result.achievedBuiltUpSqft} plotArea={Math.round(result.plotAreaSqft)} businessName={businessName} />
           </section>
         )}
@@ -357,9 +367,10 @@ export function StudioPlanner({
   );
 }
 
-function SourceTag({ s }: { s: "RECORD" | "ASSUMED" | "USER" | "MISSING" }) {
-  const map = { RECORD: ["From record", "text-emerald"], ASSUMED: ["Assumed", "text-gold-deep"], USER: ["Your figure", "text-navy"], MISSING: ["Not on record", "text-slate"] } as const;
-  return <span className={`ml-1 text-[0.65rem] font-semibold uppercase tracking-wider ${map[s][1]}`}>{map[s][0]}</span>;
+const SOURCE_TONE = { RECORD: "text-emerald", ASSUMED: "text-gold-deep", USER: "text-navy", MISSING: "text-slate" } as const;
+function SourceTag({ s }: { s: keyof typeof SOURCE_TONE }) {
+  const { t } = useI18n();
+  return <span className={`ml-1 text-[0.65rem] font-semibold uppercase tracking-wider ${SOURCE_TONE[s]}`}>{t.studio.planner.source[s]}</span>;
 }
 
 function Fact({ k, v }: { k: string; v: string }) {
@@ -372,26 +383,27 @@ function Fact({ k, v }: { k: string; v: string }) {
 }
 
 function Stepper({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-between">
       <span className="field-label mb-0">{label}</span>
-      <div className="flex items-center border border-line" role="group" aria-label={label}>
-        <button type="button" className="h-9 w-9 disabled:opacity-30" disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={`Fewer ${label.toLowerCase()}`}>−</button>
+      <div className="flex items-center rounded-full border border-line bg-ivory" role="group" aria-label={label}>
+        <button type="button" className="h-9 w-9 disabled:opacity-30" disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={t.studio.planner.fewer(label)}>−</button>
         <output className="w-8 text-center font-semibold" aria-live="polite">{value}</output>
-        <button type="button" className="h-9 w-9 disabled:opacity-30" disabled={value >= max} onClick={() => onChange(value + 1)} aria-label={`More ${label.toLowerCase()}`}>+</button>
+        <button type="button" className="h-9 w-9 disabled:opacity-30" disabled={value >= max} onClick={() => onChange(value + 1)} aria-label={t.studio.planner.more(label)}>+</button>
       </div>
     </div>
   );
 }
 
-function Segmented({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
+function Segmented({ label, name, value, options, onChange }: { label: string; name: string; value: string; options: (readonly [string, string])[]; onChange: (v: string) => void }) {
   return (
     <fieldset>
       <legend className="field-label">{label}</legend>
-      <div className="grid border border-line" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
+      <div className="liquid-seg w-full" style={{ "--n": options.length, "--at": Math.max(0, options.findIndex(([v]) => v === value)) } as React.CSSProperties}>
         {options.map(([v, l]) => (
-          <label key={v} className={`cursor-pointer px-2 py-2 text-center text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${value === v ? "bg-forest text-ivory" : "hover:bg-paper"}`}>
-            <input type="radio" className="sr-only" name={label} value={v} checked={value === v} onChange={() => onChange(v)} />
+          <label key={v} data-on={value === v} className="liquid-seg-item cursor-pointer text-center text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
+            <input type="radio" className="sr-only" name={name} value={v} checked={value === v} onChange={() => onChange(v)} />
             {l}
           </label>
         ))}

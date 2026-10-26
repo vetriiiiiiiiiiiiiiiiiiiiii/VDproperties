@@ -6,12 +6,8 @@
  * architectural drawing: setbacks, coverage and room sizes must be checked by a professional.
  */
 
-export const HOUSE_STYLES = {
-  CONTEMPORARY: "Contemporary",
-  TRADITIONAL: "Traditional (sloped roof)",
-  COURTYARD: "Courtyard home",
-  COMPACT: "Compact & efficient",
-} as const;
+/** House styles; display names live in the dictionaries. */
+export const HOUSE_STYLES = { CONTEMPORARY: true, TRADITIONAL: true, COURTYARD: true, COMPACT: true } as const;
 export type HouseStyle = keyof typeof HOUSE_STYLES;
 
 export type StudioInputs = {
@@ -68,8 +64,24 @@ export const DEFAULT_INPUTS: StudioInputs = {
 export type Rect = { x: number; y: number; w: number; h: number };
 export type RoomKind = "public" | "service" | "private" | "circulation" | "flex";
 export type PlacedRoom = Rect & { name: string; kind: RoomKind; areaSqft: number };
-export type FloorPlan = { level: number; label: string; rooms: PlacedRoom[]; areaSqft: number };
-export type Warning = { level: "info" | "caution" | "blocker"; text: string };
+export type FloorPlan = { level: number; rooms: PlacedRoom[]; areaSqft: number };
+
+/** Message codes, rendered in the visitor's language by the interface (see i18n/dict/studio). */
+export type WarningCode =
+  | "tooSmall"
+  | "noDepth"
+  | "gardenReduced"
+  | "parkingPartial"
+  | "parkingCovered"
+  | "shortfall"
+  | "coverageExceeded"
+  | "coverageUnchecked"
+  | "compact"
+  | "generous"
+  | "setbacksRecord"
+  | "setbacksAssumed"
+  | "illustrative";
+export type Warning = { level: "info" | "caution" | "blocker"; code: WarningCode; params?: Record<string, number | string>; /** Legacy saved scenarios only */ text?: string };
 
 export type StudioResult = {
   feasible: boolean;
@@ -111,22 +123,22 @@ export function clampInputs(i: StudioInputs): StudioInputs {
 /** The room programme for the chosen home, before it is fitted to the available floor area. */
 export function roomProgramme(i: StudioInputs) {
   const rooms: { name: string; kind: RoomKind; area: number; floor: "ground" | "upper" | "any" }[] = [
-    { name: "Foyer", kind: "circulation", area: 45, floor: "ground" },
-    { name: "Living", kind: "public", area: 190 + 15 * i.bedrooms, floor: "ground" },
-    { name: "Dining", kind: "public", area: 110, floor: "ground" },
-    { name: "Kitchen", kind: "service", area: 95 + 8 * i.bedrooms, floor: "ground" },
-    { name: "Utility", kind: "service", area: 40, floor: "ground" },
-    { name: "Common bath", kind: "service", area: 38, floor: "ground" },
+    { name: "foyer", kind: "circulation", area: 45, floor: "ground" },
+    { name: "living", kind: "public", area: 190 + 15 * i.bedrooms, floor: "ground" },
+    { name: "dining", kind: "public", area: 110, floor: "ground" },
+    { name: "kitchen", kind: "service", area: 95 + 8 * i.bedrooms, floor: "ground" },
+    { name: "utility", kind: "service", area: 40, floor: "ground" },
+    { name: "commonBath", kind: "service", area: 38, floor: "ground" },
   ];
   for (let b = 0; b < i.bedrooms; b++) {
     const floor = i.floors === 1 || b === 0 ? "ground" : "upper";
-    rooms.push({ name: b === 0 ? "Main bedroom" : `Bedroom ${b + 1}`, kind: "private", area: b === 0 ? 165 : 125, floor });
-    rooms.push({ name: b === 0 ? "Ensuite" : `Bath ${b + 1}`, kind: "service", area: 45, floor });
+    rooms.push({ name: b === 0 ? "mainBedroom" : `bedroom:${b + 1}`, kind: "private", area: b === 0 ? 165 : 125, floor });
+    rooms.push({ name: b === 0 ? "ensuite" : `bath:${b + 1}`, kind: "service", area: 45, floor });
   }
-  if (i.study) rooms.push({ name: "Study", kind: "flex", area: 95, floor: i.floors > 1 ? "upper" : "ground" });
+  if (i.study) rooms.push({ name: "study", kind: "flex", area: 95, floor: i.floors > 1 ? "upper" : "ground" });
   if (i.floors > 1) {
-    rooms.push({ name: "Stair", kind: "circulation", area: 85, floor: "ground" });
-    for (let f = 1; f < i.floors; f++) rooms.push({ name: f === 1 ? "Family lounge" : `Lounge L${f + 1}`, kind: "flex", area: 130, floor: "upper" });
+    rooms.push({ name: "stair", kind: "circulation", area: 85, floor: "ground" });
+    for (let f = 1; f < i.floors; f++) rooms.push({ name: f === 1 ? "familyLounge" : `lounge:${f + 1}`, kind: "flex", area: 130, floor: "upper" });
   }
   return rooms;
 }
@@ -167,13 +179,13 @@ export function generateLayout(plot: PlotGeometry, rawInputs: StudioInputs): Stu
   const plotArea = W * D;
 
   const env: Rect = { x: side, y: front, w: Math.max(0, W - 2 * side), h: Math.max(0, D - front - rear) };
-  const empty = (msg: string): StudioResult => ({
+  const empty = (code: WarningCode): StudioResult => ({
     feasible: false, plotAreaSqft: plotArea, envelope: env, footprint: { x: env.x, y: env.y, w: 0, h: 0 }, footprintSqft: 0,
     achievedBuiltUpSqft: 0, requestedBuiltUpSqft: i.builtUpSqft, maxBuiltUpSqft: 0, coveragePct: 0, floorAreaRatio: 0,
     parking: [], parkingInEnvelope: false, garden: null, gardenSqft: 0, courtyard: null, floors: [], roomScale: 0,
-    warnings: [{ level: "blocker", text: msg }],
+    warnings: [{ level: "blocker", code }],
   });
-  if (env.w < 12 || env.h < 12) return empty("After setbacks, the buildable area is too small for a house. A professional should review this plot.");
+  if (env.w < 12 || env.h < 12) return empty("tooSmall");
 
   // Parking: in the front setback when it is deep enough, otherwise as covered parking (porch/stilt)
   // within the ground floor of the house.
@@ -192,10 +204,10 @@ export function generateLayout(plot: PlotGeometry, rawInputs: StudioInputs): Stu
   const minHouseDepth = parkingInEnvelope ? SLOT_D + 8 : MIN_ROOM_DEPTH;
   if (env.h - gardenDepth < minHouseDepth && gardenDepth > 0) {
     gardenDepth = Math.max(0, env.h - minHouseDepth);
-    warnings.push({ level: "caution", text: "The garden had to be reduced to leave room for the house." });
+    warnings.push({ level: "caution", code: "gardenReduced" });
   }
   const availDepth = env.h - gardenDepth;
-  if (availDepth < minHouseDepth) return empty("There isn't enough depth after setbacks for a house with these choices. Try no garden or no covered parking.");
+  if (availDepth < minHouseDepth) return empty("noDepth");
 
   // Footprint sizing.
   const courtyardFactor = i.style === "COURTYARD" ? 1.15 : 1;
@@ -217,9 +229,9 @@ export function generateLayout(plot: PlotGeometry, rawInputs: StudioInputs): Stu
 
   if (parkingInEnvelope) {
     const slots = Math.min(slotsWanted, Math.max(1, Math.floor((fw - 8) / SLOT_W)));
-    if (slots < slotsWanted) warnings.push({ level: "caution", text: `Only ${slots} of ${slotsWanted} covered parking spaces fit across this frontage.` });
+    if (slots < slotsWanted) warnings.push({ level: "caution", code: "parkingPartial", params: { slots, wanted: slotsWanted } });
     for (let p = 0; p < slots; p++) parking.push({ x: footprint.x + fw - (p + 1) * SLOT_W, y: footprint.y, w: SLOT_W, h: SLOT_D });
-    warnings.push({ level: "info", text: "The front setback is shallow, so parking is shown as covered parking within the ground floor." });
+    warnings.push({ level: "info", code: "parkingCovered" });
   }
   const parkingArea = parkingInEnvelope ? parking.reduce((s, r) => s + r.w * r.h, 0) : 0;
   const courtyard = i.style === "COURTYARD" && fw > 24 && fd > 30 ? { x: footprint.x + fw * 0.15, y: footprint.y + fd * 0.55, w: fw * 0.3, h: fd * 0.22 } : null;
@@ -228,34 +240,31 @@ export function generateLayout(plot: PlotGeometry, rawInputs: StudioInputs): Stu
   const maxBuiltUp = Math.round((env.w * availDepth - courtyardArea) * i.floors - parkingArea);
   const achieved = Math.round(Math.max(0, Math.min(i.builtUpSqft, usableTotal)));
   if (shortfall || achieved < i.builtUpSqft) {
-    warnings.push({ level: "caution", text: `About ${achieved.toLocaleString("en-IN")} sq ft fits with these choices — less than the ${i.builtUpSqft.toLocaleString("en-IN")} sq ft requested. Add a floor or reduce parking or garden.` });
+    warnings.push({ level: "caution", code: "shortfall", params: { achieved, requested: i.builtUpSqft } });
   }
 
   const coveragePct = (footprintSqft / plotArea) * 100;
   if (plot.maxCoveragePct) {
     if (coveragePct > plot.maxCoveragePct) {
-      warnings.push({
-        level: "blocker",
-        text: `Ground coverage of ${coveragePct.toFixed(0)}% exceeds the ${plot.maxCoveragePct}% limit ${plot.coverageSource === "RECORD" ? "recorded for this plot" : "you entered"}. The concept would need to be redesigned.`,
-      });
+      warnings.push({ level: "blocker", code: "coverageExceeded", params: { pct: Math.round(coveragePct), limit: plot.maxCoveragePct, source: plot.coverageSource === "RECORD" ? "RECORD" : "USER" } });
     }
   } else {
-    warnings.push({ level: "info", text: "No ground-coverage limit is on record for this plot, so coverage hasn't been checked against local rules." });
+    warnings.push({ level: "info", code: "coverageUnchecked" });
   }
 
   // Room zoning.
   const programme = roomProgramme(i);
   const programmeTotal = programme.reduce((s, r) => s + r.area, 0) * 1.1; // circulation allowance
   const roomScale = achieved / programmeTotal;
-  if (roomScale < 0.8) warnings.push({ level: "caution", text: "For this many rooms the area is tight — rooms would be compact. Consider more built-up area or fewer bedrooms." });
-  if (roomScale > 1.5) warnings.push({ level: "info", text: "There is generous space for the rooms chosen; rooms could be larger or a further room added." });
+  if (roomScale < 0.8) warnings.push({ level: "caution", code: "compact" });
+  if (roomScale > 1.5) warnings.push({ level: "info", code: "generous" });
 
   const levels: FloorPlan[] = [];
   for (let level = 0; level < i.floors; level++) {
     const rooms = programme.filter((r) => (level === 0 ? r.floor === "ground" : r.floor === "upper" && upperFloorFor(r, programme, i.floors) === level));
-    if (level > 0 && i.floors > 1) rooms.unshift({ name: "Stair", kind: "circulation", area: 85, floor: "upper" });
+    if (level > 0 && i.floors > 1) rooms.unshift({ name: "stair", kind: "circulation", area: 85, floor: "upper" });
     // Public spaces face the road; private rooms sit towards the rear.
-    const frontGroup = rooms.filter((r) => r.kind === "public" || r.name === "Foyer" || (level > 0 && r.kind === "flex"));
+    const frontGroup = rooms.filter((r) => r.kind === "public" || r.name === "foyer" || (level > 0 && r.kind === "flex"));
     const backGroup = rooms.filter((r) => !frontGroup.includes(r));
     const fArea = frontGroup.reduce((s, r) => s + r.area, 0);
     const bArea = backGroup.reduce((s, r) => s + r.area, 0);
@@ -275,15 +284,12 @@ export function generateLayout(plot: PlotGeometry, rawInputs: StudioInputs): Stu
       ];
     }
     if (courtyard) placed = placed.filter((r) => !(r.x >= courtyard.x && r.y >= courtyard.y && r.x + r.w <= courtyard.x + courtyard.w && r.y + r.h <= courtyard.y + courtyard.h));
-    levels.push({ level, label: level === 0 ? "Ground floor" : level === 1 ? "First floor" : "Second floor", rooms: placed, areaSqft: Math.round(achieved / i.floors) });
+    levels.push({ level, rooms: placed, areaSqft: Math.round(achieved / i.floors) });
   }
 
   const garden = gardenDepth > 0 ? { x: env.x, y: envBottom - gardenDepth, w: env.w, h: gardenDepth } : null;
-  warnings.push({
-    level: "info",
-    text: plot.setbackSource === "RECORD" ? "Setbacks are taken from this property's records." : "Setbacks shown are starting assumptions, not local rules — confirm them with the planning authority.",
-  });
-  if (plot.illustrative) warnings.push({ level: "info", text: "This is an illustrative plot you described — not a surveyed property." });
+  warnings.push({ level: "info", code: plot.setbackSource === "RECORD" ? "setbacksRecord" : "setbacksAssumed" });
+  if (plot.illustrative) warnings.push({ level: "info", code: "illustrative" });
 
   return {
     feasible: !warnings.some((w) => w.level === "blocker"),

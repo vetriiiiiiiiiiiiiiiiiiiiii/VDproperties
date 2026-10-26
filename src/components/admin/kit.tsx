@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState, useId } from "react";
 import { useFormStatus } from "react-dom";
+import { useI18n } from "@/i18n/client";
 import type { ActionResult } from "@/lib/admin";
 
 export function Status({ state }: { state: ActionResult | null }) {
@@ -30,11 +31,12 @@ export function useFormAction(fn: (prev: ActionResult | null, fd: FormData) => P
 
 export function Submit({ children, name, value, variant = "primary", className = "", pending: forced }: { children: React.ReactNode; name?: string; value?: string; variant?: "primary" | "outline" | "gold" | "danger"; className?: string; pending?: boolean }) {
   const status = useFormStatus();
+  const { t } = useI18n();
   const pending = forced ?? status.pending;
   const styles = { primary: "btn-primary", outline: "btn-outline text-navy", gold: "btn-gold", danger: "btn-outline text-terracotta-deep" }[variant];
   return (
     <button type="submit" name={name} value={value} disabled={pending} aria-busy={pending} className={`btn ${styles} min-h-10 py-2 text-sm ${className}`}>
-      {pending ? "Saving…" : children}
+      {pending ? t.forms.sending : children}
     </button>
   );
 }

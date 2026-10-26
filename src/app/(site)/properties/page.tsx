@@ -1,26 +1,30 @@
 import type { Metadata } from "next";
 import { ListingView } from "@/components/property/ListingView";
 import { PageIntro } from "@/components/site/ui";
+import { alternates, getI18n } from "@/i18n/server";
 import { hasActiveFilters, parseSearchParams, type RawSearchParams } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<RawSearchParams> }): Promise<Metadata> {
+  const { t } = await getI18n();
   const filtered = hasActiveFilters(parseSearchParams(await searchParams));
   return {
-    title: "Buy Properties",
-    description: "Search residential plots, land, houses and villas from V D Properties by location, budget, area and availability.",
-    alternates: { canonical: "/properties" },
+    title: t.listings.pages.all.meta,
+    description: t.listings.pages.all.desc,
+    alternates: await alternates("/properties"),
     // Filtered permutations aren't indexed, which avoids thin duplicate pages.
     robots: filtered ? { index: false, follow: true } : undefined,
   };
 }
 
 export default async function PropertiesPage({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
+  const { t } = await getI18n();
+  const x = t.listings.pages.all;
   return (
     <>
-      <PageIntro eyebrow="Property search" title="Properties for sale" crumbs={[{ label: "Buy properties" }]}>
-        Every published listing — residential plots, land, houses and villas. Filter by what matters to you; the link updates so you can share your search.
+      <PageIntro eyebrow={x.eyebrow} title={x.title} crumbs={[{ label: x.crumb }]}>
+        {x.intro}
       </PageIntro>
       <ListingView path="/properties" raw={await searchParams} scope="all" />
     </>

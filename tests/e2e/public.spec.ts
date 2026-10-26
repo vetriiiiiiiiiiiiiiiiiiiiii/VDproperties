@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 test.describe("public site", () => {
   test("homepage presents the brand, search and featured listings", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("A better place to begin your");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Land, homes and the house you'll build on it.");
+    // The hero shows a real featured listing and links to it.
+    const showcase = page.getByRole("figure", { name: "Featured listing" });
+    await expect(showcase.getByRole("link", { name: "View property" })).toHaveAttribute("href", /^\/properties\/[a-z0-9-]+$/);
     await expect(page.getByRole("search", { name: "Search properties" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Featured properties" })).toBeVisible();
     await expect(page.getByText("Development build: this site contains")).toBeVisible();

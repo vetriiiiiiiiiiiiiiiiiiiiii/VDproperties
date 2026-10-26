@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/i18n/client";
 import { EnquiryForm } from "@/components/forms/EnquiryForm";
 import { SiteVisitForm } from "@/components/forms/SiteVisitForm";
 
@@ -13,7 +14,7 @@ export function EnquiryPanel({
   phoneHref,
   whatsappHref,
   phone,
-  noun = "Property",
+  noun,
 }: {
   noun?: string;
   subject: { propertyId?: string; projectId?: string };
@@ -25,16 +26,18 @@ export function EnquiryPanel({
   whatsappHref?: string;
   phone?: string;
 }) {
+  const { t } = useI18n();
+  const x = t.listings.panel;
   const [tab, setTab] = useState<"enquire" | "visit">("enquire");
   const value = subject.propertyId ? `p:${subject.propertyId}` : `j:${subject.projectId}`;
   return (
-    <div className="border border-line bg-white" id="enquire">
-      <div role="tablist" aria-label="Contact options" className="grid grid-cols-2 border-b border-line">
-        <button role="tab" type="button" id="tab-enq" aria-selected={tab === "enquire"} aria-controls="panel-enq" onClick={() => setTab("enquire")} className={`px-4 py-4 text-sm font-semibold ${tab === "enquire" ? "bg-forest text-ivory" : "text-ink hover:bg-ivory"}`}>
-          Enquire About This {noun}
+    <div className="surface overflow-hidden" id="enquire">
+      <div role="tablist" aria-label={x.options} className="liquid-seg m-3 text-sm" style={{ "--n": 2, "--at": tab === "visit" ? 1 : 0 } as React.CSSProperties}>
+        <button role="tab" type="button" id="tab-enq" aria-selected={tab === "enquire"} aria-controls="panel-enq" onClick={() => setTab("enquire")} className="liquid-seg-item whitespace-normal py-2.5 font-semibold">
+          {x.enquire(noun ?? x.property)}
         </button>
-        <button role="tab" type="button" id="tab-visit" aria-selected={tab === "visit"} aria-controls="panel-visit" disabled={!canVisit} onClick={() => setTab("visit")} className={`px-4 py-4 text-sm font-semibold disabled:text-slate/60 ${tab === "visit" ? "bg-forest text-ivory" : "text-ink hover:bg-ivory"}`}>
-          Request a Site Visit
+        <button role="tab" type="button" id="tab-visit" aria-selected={tab === "visit"} aria-controls="panel-visit" disabled={!canVisit} onClick={() => setTab("visit")} className="liquid-seg-item whitespace-normal py-2.5 font-semibold disabled:text-slate/60">
+          {x.visit}
         </button>
       </div>
       <div className="p-5 sm:p-6">
@@ -51,12 +54,12 @@ export function EnquiryPanel({
         <div className="grid border-t border-line sm:grid-cols-2">
           {phoneHref && (
             <a href={phoneHref} className="flex items-center justify-center gap-2 px-4 py-4 text-sm font-semibold text-navy hover:bg-ivory">
-              Call the Company{phone ? ` · ${phone}` : ""}
+              {x.call}{phone ? ` · ${phone}` : ""}
             </a>
           )}
           {whatsappHref && (
             <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 border-t border-line px-4 py-4 text-sm font-semibold text-emerald hover:bg-ivory sm:border-l sm:border-t-0">
-              WhatsApp Enquiry
+              {x.whatsapp}
             </a>
           )}
         </div>

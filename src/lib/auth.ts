@@ -7,6 +7,7 @@ import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { db } from "./db";
 import { can, isStaff, type Permission } from "./rbac";
+import { isLocale, LOCALE_HEADER, localePath } from "@/i18n/config";
 
 export const SESSION_COOKIE = "vdp_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -112,7 +113,11 @@ export async function requirePermission(permission: Permission) {
 /** For customer pages: signed-in customer accounts only. Staff are sent to the admin. */
 export async function requireCustomerPage(next = "/account") {
   const user = await getCurrentUser();
-  if (!user) redirect(`/account/login?next=${encodeURIComponent(next)}`);
+  if (!user) {
+    const lang = (await headers()).get(LOCALE_HEADER);
+    const L = isLocale(lang) ? lang : "en";
+    redirect(localePath(L, `/account/login?next=${encodeURIComponent(localePath(L, next))}`));
+  }
   if (isStaff(user.role)) redirect("/admin");
   return user;
 }

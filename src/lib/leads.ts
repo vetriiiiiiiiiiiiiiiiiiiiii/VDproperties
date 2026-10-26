@@ -1,5 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { localePath, type Locale } from "@/i18n/config";
+import { DICTS } from "@/i18n/dict";
+import { requestLocale, translateErrors, translateMessage } from "@/i18n/messages";
 import { getCurrentUser } from "./auth";
 import { db } from "./db";
 import { ENQUIRY_TYPE_LABEL } from "./labels";
@@ -14,9 +17,9 @@ const MAX_BODY_BYTES = 20_000;
 type Fail = { ok?: false; status: number; message: string; errors?: Record<string, string> };
 
 /** JSON for the enhanced form; a 303 redirect to a confirmation page for a plain HTML form post. */
-function respond(req: Request, kind: "enquiry" | "visit", result: { ok: true; message: string; reference: string } | Fail) {
+function respond(req: Request, kind: "enquiry" | "visit", result: { ok: true; message: string; reference: string } | Fail, locale: Locale = "en") {
   if (isNativeForm(req)) {
-    const url = new URL("/thank-you", req.url);
+    const url = new URL(localePath(locale, "/thank-you"), req.url);
     url.searchParams.set("kind", kind);
     if (result.ok) url.searchParams.set("ref", result.reference);
     else url.searchParams.set("error", String(result.status));
@@ -36,17 +39,18 @@ function ipOf(req: Request) {
 }
 
 /** Common checks for every public form: same-origin, size, rate limit, JSON parsing. */
-async function readSubmission(req: Request, bucket: string): Promise<{ body: unknown; ip: string } | Fail> {
+async function readSubmission(req: Request, bucket: string, locale: Locale): Promise<{ body: unknown; ip: string } | Fail> {
+  const m = DICTS[locale].server;
   const origin = req.headers.get("origin");
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) return { status: 403, message: "This form can only be sent from our website." };
+  if (origin && host && new URL(origin).host !== host) return { status: 403, message: m.otherSite };
 
   const length = Number(req.headers.get("content-length") ?? 0);
-  if (length > MAX_BODY_BYTES) return { status: 413, message: "Your message is too long. Please shorten it and try again." };
+  if (length > MAX_BODY_BYTES) return { status: 413, message: m.tooLong };
 
   const ip = ipOf(req);
   const limit = rateLimit(`${bucket}:${ip}`, Number(process.env.FORM_RATE_LIMIT ?? 6), 10 * 60 * 1000);
-  if (!limit.ok) return { status: 429, message: `Too many requests from this connection. Please try again in ${Math.ceil(limit.retryAfter / 60)} minute(s).` };
+  if (!limit.ok) return { status: 429, message: m.tooMany(Math.ceil(limit.retryAfter / 60)) };
 
   try {
     if (isNativeForm(req)) {
@@ -63,15 +67,13 @@ async function readSubmission(req: Request, bucket: string): Promise<{ body: unk
       return { body, ip };
     }
     const text = await req.text();
-    if (text.length > MAX_BODY_BYTES) return { status: 413, message: "Your message is too long. Please shorten it and try again." };
+    if (text.length > MAX_BODY_BYTES) return { status: 413, message: m.tooLong };
     return { body: JSON.parse(text), ip };
   } catch {
-    return { status: 400, message: "We couldn't read your submission. Please try again." };
+    return { status: 400, message: m.unreadable };
   }
 }
 
-const SPAM_MESSAGE = "We couldn't verify this submission. Please wait a few seconds and send it again, or call us directly.";
-const DUPLICATE_MESSAGE = "We've already received this request in the last few minutes, so there's no need to send it again. Our team will be in touch.";
 
 async function isDuplicate(model: "enquiry" | "siteVisit", fingerprint: string) {
   const since = new Date(Date.now() - DUPLICATE_WINDOW_MS);
@@ -81,13 +83,16 @@ async function isDuplicate(model: "enquiry" | "siteVisit", fingerprint: string) 
 }
 
 export async function handleEnquiry(req: Request) {
-  const read = await readSubmission(req, "enquiry");
-  if ("status" in read) return respond(req, "enquiry", read);
+  const read = await readSubmission(req, "enquiry", requestLocale(req));
+  if ("status" in read) return respond(req, "enquiry", read, requestLocale(req));
+  const L = requestLocale(req, read.body);
+  const m = DICTS[L].server;
+  const reply = (r: Parameters<typeof respond>[2]) => respond(req, "enquiry", r, L);
 
   const parsed = enquirySchema.safeParse(read.body);
-  if (!parsed.success) return respond(req, "enquiry", { status: 422, message: "Please check the highlighted fields.", errors: fieldErrors(parsed.error) });
+  if (!parsed.success) return reply({ status: 422, message: m.checkFields, errors: translateErrors(fieldErrors(parsed.error), L) });
   const input = parsed.data;
-  if (spamReason(input) || looksLikeLinkSpam(input.message)) return respond(req, "enquiry", { status: 400, message: SPAM_MESSAGE });
+  if (spamReason(input) || looksLikeLinkSpam(input.message)) return reply({ status: 400, message: m.spam });
 
   // Attach the listing only if it is actually public; never trust a client-supplied label.
   let propertyLabel: string | null = null;
@@ -95,19 +100,19 @@ export async function handleEnquiry(req: Request) {
   let projectId: string | null = null;
   if (input.propertyId) {
     const p = await db.property.findFirst({ where: { id: input.propertyId, publication: "PUBLISHED" }, select: { id: true, title: true, referenceCode: true } });
-    if (!p) return respond(req, "enquiry", { status: 422, message: "This property is no longer listed. Please send a general enquiry instead." });
+    if (!p) return reply({ status: 422, message: m.propertyGone });
     propertyId = p.id;
     propertyLabel = `${p.referenceCode} · ${p.title}`;
   }
   if (input.projectId) {
     const j = await db.project.findFirst({ where: { id: input.projectId, publication: "PUBLISHED" }, select: { id: true, name: true } });
-    if (!j) return respond(req, "enquiry", { status: 422, message: "This project is no longer listed. Please send a general enquiry instead." });
+    if (!j) return reply({ status: 422, message: m.projectGone });
     projectId = j.id;
     propertyLabel ??= j.name;
   }
 
   const fingerprint = submissionFingerprint(["enquiry", input.type, input.phone.replace(/\D/g, ""), propertyId, projectId, input.message?.slice(0, 200)]);
-  if (await isDuplicate("enquiry", fingerprint)) return respond(req, "enquiry", { status: 409, message: DUPLICATE_MESSAGE });
+  if (await isDuplicate("enquiry", fingerprint)) return reply({ status: 409, message: m.duplicate });
 
   const viewer = await getCurrentUser();
   const enquiry = await db.enquiry.create({
@@ -135,21 +140,27 @@ export async function handleEnquiry(req: Request) {
   });
 
   await notifyNewLead(ENQUIRY_TYPE_LABEL[enquiry.type].toLowerCase(), propertyLabel ?? "the website", `/admin/enquiries/${enquiry.id}`);
-  return respond(req, "enquiry", { ok: true, message: "Thank you — your enquiry has been received.", reference: enquiry.id.slice(-8).toUpperCase() });
+  return reply({ ok: true, message: m.enquiryOk, reference: enquiry.id.slice(-8).toUpperCase() });
 }
 
 export async function handleSiteVisit(req: Request) {
-  const read = await readSubmission(req, "visit");
-  if ("status" in read) return respond(req, "visit", read);
+  const read = await readSubmission(req, "visit", requestLocale(req));
+  if ("status" in read) return respond(req, "visit", read, requestLocale(req));
+  const L = requestLocale(req, read.body);
+  const m = DICTS[L].server;
+  const reply = (r: Parameters<typeof respond>[2]) => respond(req, "visit", r, L);
 
   const parsed = siteVisitSchema.safeParse(read.body);
-  if (!parsed.success) return respond(req, "visit", { status: 422, message: "Please check the highlighted fields.", errors: fieldErrors(parsed.error) });
+  if (!parsed.success) return reply({ status: 422, message: m.checkFields, errors: translateErrors(fieldErrors(parsed.error), L) });
   const input = parsed.data;
-  if (spamReason(input) || looksLikeLinkSpam(input.message)) return respond(req, "visit", { status: 400, message: SPAM_MESSAGE });
+  if (spamReason(input) || looksLikeLinkSpam(input.message)) return reply({ status: 400, message: m.spam });
 
   const s = await getSettings();
   const dateError = checkVisitDate(input.preferredDate, todayInIndia(), { closedWeekdays: s.visitClosedWeekdays, blackoutDates: s.visitBlackoutDates });
-  if (dateError) return respond(req, "visit", { status: 422, message: dateError, errors: { preferredDate: dateError } });
+  if (dateError) {
+    const msg = translateMessage(dateError, L);
+    return reply({ status: 422, message: msg, errors: { preferredDate: msg } });
+  }
 
   let subjectLabel: string;
   let propertyId: string | null = null;
@@ -159,20 +170,20 @@ export async function handleSiteVisit(req: Request) {
       where: { id: input.propertyId, publication: "PUBLISHED" },
       select: { id: true, title: true, referenceCode: true, availability: true },
     });
-    if (!p) return respond(req, "visit", { status: 422, message: "This property is no longer listed.", errors: { propertyId: "Choose another property" } });
+    if (!p) return reply({ status: 422, message: m.propertyGone, errors: { propertyId: m.chooseAnother } });
     if (p.availability === "SOLD" || p.availability === "UNAVAILABLE")
-      return respond(req, "visit", { status: 422, message: "This property is no longer open for site visits.", errors: { propertyId: "Choose another property" } });
+      return reply({ status: 422, message: m.visitClosed, errors: { propertyId: m.chooseAnother } });
     propertyId = p.id;
     subjectLabel = `${p.referenceCode} · ${p.title}`;
   } else {
     const j = await db.project.findFirst({ where: { id: input.projectId!, publication: "PUBLISHED" }, select: { id: true, name: true } });
-    if (!j) return respond(req, "visit", { status: 422, message: "This project is no longer listed.", errors: { propertyId: "Choose another project" } });
+    if (!j) return reply({ status: 422, message: m.projectGone, errors: { propertyId: m.chooseAnotherProject } });
     projectId = j.id;
     subjectLabel = j.name;
   }
 
   const fingerprint = submissionFingerprint(["visit", input.phone.replace(/\D/g, ""), propertyId, projectId, input.preferredDate]);
-  if (await isDuplicate("siteVisit", fingerprint)) return respond(req, "visit", { status: 409, message: DUPLICATE_MESSAGE });
+  if (await isDuplicate("siteVisit", fingerprint)) return reply({ status: 409, message: m.duplicate });
 
   const viewer = await getCurrentUser();
   const visit = await db.siteVisit.create({
@@ -194,6 +205,6 @@ export async function handleSiteVisit(req: Request) {
   });
 
   await notifyNewLead("site visit request", subjectLabel, `/admin/site-visits/${visit.id}`);
-  return respond(req, "visit", { ok: true, message: "Thank you — your site visit request has been received.", reference: visit.id.slice(-8).toUpperCase() });
+  return reply({ ok: true, message: m.visitOk, reference: visit.id.slice(-8).toUpperCase() });
 }
 

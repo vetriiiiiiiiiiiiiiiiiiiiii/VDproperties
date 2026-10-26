@@ -1,7 +1,8 @@
-import Link from "next/link";
+import Link from "@/i18n/Link";
+import { getI18n } from "@/i18n/server";
 import { AvailabilityBadge, Breadcrumbs, JsonLd, ProjectStatusBadge, SampleTag } from "@/components/site/ui";
-import { formatArea, formatDate, formatPrice, phoneHref, whatsappHref } from "@/lib/format";
-import { PROPERTY_TYPE_LABEL, isHomeType } from "@/lib/labels";
+import { phoneHref, whatsappHref } from "@/lib/format";
+import { isHomeType } from "@/lib/labels";
 import { getRelatedProperties, type PropertyDetail } from "@/lib/queries";
 import { getSettings } from "@/lib/settings";
 import { absoluteUrl } from "@/lib/site";
@@ -16,6 +17,9 @@ import { PropertyCard } from "./PropertyCard";
 type Spec = [label: string, value: string | number | null | undefined];
 
 export async function PropertyDetailView({ p, preview = false }: { p: PropertyDetail; preview?: boolean }) {
+  const { t, f, href } = await getI18n();
+  const d = t.listings.detail;
+  const area = (n: number) => f.area(n);
   const [settings, related] = await Promise.all([
     getSettings(),
     preview ? Promise.resolve([]) : getRelatedProperties({ id: p.id, type: p.type, locationId: p.locationId, publicPrice: p.publicPrice }),
@@ -31,37 +35,37 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
   // Only fields that hold a value are shown; empty labels are never rendered.
   const keyFacts: Spec[] = home
     ? [
-        ["Bedrooms", p.bedrooms],
-        ["Bathrooms", p.bathrooms],
-        ["Built-up area", p.builtUpAreaSqft ? formatArea(p.builtUpAreaSqft) : null],
-        ["Plot area", p.landAreaLabel ?? (p.landAreaSqft ? formatArea(p.landAreaSqft) : null)],
+        [t.facts.bedrooms, p.bedrooms],
+        [t.facts.bathrooms, p.bathrooms],
+        [t.facts.builtUpArea, p.builtUpAreaSqft ? area(p.builtUpAreaSqft) : null],
+        [t.facts.plotArea, p.landAreaLabel ?? (p.landAreaSqft ? area(p.landAreaSqft) : null)],
       ]
     : [
-        ["Land area", p.landAreaLabel ?? (p.landAreaSqft ? formatArea(p.landAreaSqft) : null)],
-        ["Dimensions", p.plotDimensions],
-        ["Facing", p.facing],
-        ["Access road", p.accessRoad],
+        [t.facts.landArea, p.landAreaLabel ?? (p.landAreaSqft ? area(p.landAreaSqft) : null)],
+        [t.facts.dimensions, p.plotDimensions],
+        [t.facts.facing, p.facing],
+        [t.facts.accessRoad, p.accessRoad],
       ];
   const details: Spec[] = [
-    ["Property ID", p.referenceCode],
-    ["Property type", PROPERTY_TYPE_LABEL[p.type]],
-    ["Location", [place, p.location?.city].filter(Boolean).join(", ") || null],
-    ["Land area", p.landAreaLabel ?? (p.landAreaSqft ? formatArea(p.landAreaSqft) : null)],
-    ["Plot dimensions", p.plotDimensions],
-    ["Facing", p.facing],
-    ["Built-up area", p.builtUpAreaSqft ? formatArea(p.builtUpAreaSqft) : null],
-    ["Bedrooms", p.bedrooms],
-    ["Bathrooms", p.bathrooms],
-    ["Floors", p.floors],
-    ["Access road", p.accessRoad],
-    ["Development status", p.developmentStatus],
-    ["Project", p.project?.publication === "PUBLISHED" ? p.project.name : null],
+    [t.facts.propertyId, p.referenceCode],
+    [t.facts.propertyType, t.labels.propertyType[p.type]],
+    [t.facts.location, [place, p.location?.city].filter(Boolean).join(", ") || null],
+    [t.facts.landArea, p.landAreaLabel ?? (p.landAreaSqft ? area(p.landAreaSqft) : null)],
+    [t.facts.plotDimensions, p.plotDimensions],
+    [t.facts.facing, p.facing],
+    [t.facts.builtUpArea, p.builtUpAreaSqft ? area(p.builtUpAreaSqft) : null],
+    [t.facts.bedrooms, p.bedrooms],
+    [t.facts.bathrooms, p.bathrooms],
+    [t.facts.floors, p.floors],
+    [t.facts.accessRoad, p.accessRoad],
+    [t.facts.developmentStatus, p.developmentStatus],
+    [t.facts.project, p.project?.publication === "PUBLISHED" ? p.project.name : null],
   ];
   const visible = (s: Spec[]) => s.filter(([, v]) => v !== null && v !== undefined && v !== "");
 
   const exactMap = p.showExactLocation && p.latitude !== null && p.longitude !== null;
   const call = settings.phone ? `tel:${phoneHref(settings.phone)}` : undefined;
-  const wa = settings.whatsapp ? whatsappHref(settings.whatsapp, `Hello, I'm interested in ${p.referenceCode} — ${p.title}`) : undefined;
+  const wa = settings.whatsapp ? whatsappHref(settings.whatsapp, t.listings.panel.whatsappText(p.referenceCode, p.title)) : undefined;
 
   return (
     <article>
@@ -71,7 +75,7 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
             "@context": "https://schema.org",
             "@type": "RealEstateListing",
             name: p.title,
-            url: absoluteUrl(`/properties/${p.slug}`),
+            url: absoluteUrl(href(`/properties/${p.slug}`)),
             ...(p.summary && { description: p.summary }),
             ...(p.publishedAt && { datePosted: p.publishedAt.toISOString() }),
             ...(p.images[0] && !p.images[0].url.startsWith("placeholder:") && { image: absoluteUrl(p.images[0].url) }),
@@ -88,14 +92,14 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
       )}
 
       <div className="wrap pb-6 pt-8">
-        {!preview && <Breadcrumbs items={[{ label: home ? "Houses & villas" : "Plots & land", href: listHref }, { label: p.title }]} />}
+        {!preview && <Breadcrumbs items={[{ label: home ? t.listings.pages.houses.crumb : t.listings.pages.plots.crumb, href: listHref }, { label: p.title }]} />}
       </div>
 
       {!open && (
         <div className="wrap">
-          <p className="border-l-4 border-terracotta bg-white p-4 text-sm text-ink">
-            This property is <strong>{p.availability === "SOLD" ? "sold" : "no longer available"}</strong>. It's shown for reference.{" "}
-            <Link href={listHref} className="underline">See available {home ? "homes" : "plots"}</Link>.
+          <p className="surface border-l-4 border-terracotta p-4 text-sm text-ink">
+            {d.unavailable(d.soldNotice(p.availability === "SOLD"))}{" "}
+            <Link href={listHref} className="underline">{d.seeAvailable(home)}</Link>.
           </p>
         </div>
       )}
@@ -112,29 +116,29 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
             {p.isSample && <SampleTag />}
             <span className="annot-plain ml-1 text-slate">{p.referenceCode}</span>
           </div>
-          <p className="annot mt-6 text-emerald">{PROPERTY_TYPE_LABEL[p.type]}{place ? ` · ${place}` : ""}</p>
+          <p className="annot mt-6 text-emerald">{t.labels.propertyType[p.type]}{place ? ` · ${place}` : ""}</p>
           <h1 className="mt-3 text-headline text-navy">{p.title}</h1>
           <p className="mt-5">
             {price !== null ? (
-              <span className="font-serif text-4xl text-navy">{formatPrice(price)}</span>
+              <span className="font-serif text-4xl text-navy">{f.price(price)}</span>
             ) : (
-              <span className="font-serif text-3xl italic text-slate">Contact for price</span>
+              <span className="font-serif text-3xl italic text-slate">{t.price.onRequest}</span>
             )}
             {p.priceNote && <span className="ml-3 text-sm text-slate">{p.priceNote}</span>}
           </p>
           {!preview && (
             <div className="mt-6 flex flex-wrap gap-2">
-              <Link href={`/twin/${p.slug}`} className="btn btn-outline min-h-10 text-sm text-navy">Open Property Twin</Link>
-              {p.plotWidthFt && p.plotDepthFt && open && <Link href={`/studio/${p.slug}`} className="btn btn-gold min-h-10 text-sm">Design Your Home</Link>}
-              <Link href={`/compare?p=${p.slug}`} className="btn btn-outline min-h-10 text-sm text-navy">Compare</Link>
+              <Link href={`/twin/${p.slug}`} className="btn btn-outline min-h-10 text-sm text-navy">{d.openTwin}</Link>
+              {p.plotWidthFt && p.plotDepthFt && open && <Link href={`/studio/${p.slug}`} className="btn btn-gold min-h-10 text-sm">{d.design}</Link>}
+              <Link href={`/compare?p=${p.slug}`} className="btn btn-outline min-h-10 text-sm text-navy">{d.compare}</Link>
               <SaveButton propertyId={p.id} saved={isSaved} signedIn={viewer?.role === "CUSTOMER"} className="min-h-10 text-sm" />
             </div>
           )}
 
           {visible(keyFacts).length > 0 && (
-            <dl className="survey-grid mt-10 grid grid-cols-2 border border-line bg-white text-navy sm:grid-cols-4">
-              {visible(keyFacts).map(([k, v]) => (
-                <div key={k} className="border-b border-r border-line p-4 last:border-r-0 sm:border-b-0">
+            <dl className="mt-10 grid grid-cols-2 gap-3 text-navy sm:grid-cols-4">
+              {visible(keyFacts).map(([k, v], i) => (
+                <div key={k} className="surface vd-pop p-4" style={{ ["--i" as string]: i }}>
                   <dt className="annot-plain text-slate">{k}</dt>
                   <dd className="mt-2 font-serif text-xl">{v}</dd>
                 </div>
@@ -152,8 +156,8 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
           )}
 
           <section className="mt-12" aria-labelledby="details-h">
-            <h2 id="details-h" className="annot text-emerald">Property details</h2>
-            <dl className="mt-4 divide-y divide-line border-y border-line">
+            <h2 id="details-h" className="annot text-emerald">{d.details}</h2>
+            <dl className="surface mt-4 divide-y divide-line px-5">
               {visible(details).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[minmax(8rem,14rem)_1fr] gap-4 py-3">
                   <dt className="text-sm text-slate">{k}</dt>
@@ -165,11 +169,11 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
 
           {p.amenities.length > 0 && (
             <section className="mt-12" aria-labelledby="amen-h">
-              <h2 id="amen-h" className="annot text-emerald">Amenities & infrastructure</h2>
+              <h2 id="amen-h" className="annot text-emerald">{d.amenities}</h2>
               <ul className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
                 {p.amenities.map((a) => (
                   <li key={a.id} className="flex items-center gap-3 text-ink">
-                    <span className="h-1.5 w-1.5 bg-gold" aria-hidden="true" />
+                    <span className="h-2 w-2 rounded-full bg-gold" aria-hidden="true" />
                     {a.name}
                   </li>
                 ))}
@@ -178,9 +182,9 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
           )}
 
           {[
-            ["Utilities & infrastructure", p.utilities],
-            ["Construction specifications", p.constructionSpecs],
-            ["Approvals & registration", p.approvalInfo],
+            [d.utilities, p.utilities],
+            [d.specs, p.constructionSpecs],
+            [d.approvals, p.approvalInfo],
           ]
             .filter(([, v]) => v)
             .map(([k, v]) => (
@@ -192,11 +196,11 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
 
           {p.documents.length > 0 && (
             <section className="mt-12">
-              <h2 className="annot text-emerald">Documents</h2>
+              <h2 className="annot text-emerald">{d.documents}</h2>
               <ul className="mt-4 space-y-2">
-                {p.documents.map((d) => (
-                  <li key={d.id}>
-                    <a href={`/documents/${d.id}`} className="link-arrow text-navy" target="_blank" rel="noopener">{d.title} (PDF)</a>
+                {p.documents.map((doc) => (
+                  <li key={doc.id}>
+                    <a href={`/documents/${doc.id}`} className="link-arrow text-navy" target="_blank" rel="noopener">{doc.title} {d.pdf}</a>
                   </li>
                 ))}
               </ul>
@@ -204,40 +208,40 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
           )}
 
           <section className="mt-12" aria-labelledby="loc-h">
-            <h2 id="loc-h" className="annot text-emerald">Location</h2>
+            <h2 id="loc-h" className="annot text-emerald">{d.location}</h2>
             {exactMap ? (
               <div className="mt-4">
-                <div className="relative aspect-[16/9] border border-line">
+                <div className="relative aspect-[16/9] overflow-hidden rounded-[1rem]">
                   <iframe
-                    title={`Map showing the location of ${p.title}`}
+                    title={d.mapTitle(p.title)}
                     className="absolute inset-0 h-full w-full"
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     src={`https://www.openstreetmap.org/export/embed.html?bbox=${p.longitude! - 0.01},${p.latitude! - 0.006},${p.longitude! + 0.01},${p.latitude! + 0.006}&layer=mapnik&marker=${p.latitude},${p.longitude}`}
                   />
                 </div>
-                <a href={`https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=16/${p.latitude}/${p.longitude}`} target="_blank" rel="noopener noreferrer" className="link-arrow mt-3 text-sm text-navy">Open larger map</a>
+                <a href={`https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=16/${p.latitude}/${p.longitude}`} target="_blank" rel="noopener noreferrer" className="link-arrow mt-3 text-sm text-navy">{d.largerMap}</a>
               </div>
             ) : (
-              <div className="mt-4 border border-dashed border-line bg-white p-5">
-                <p className="text-ink">{[place, p.location?.city, p.location?.state].filter(Boolean).join(", ") || "Location shared on enquiry"}</p>
-                <p className="mt-1 text-sm text-slate">The exact location is shared with you directly when you enquire or arrange a site visit.</p>
+              <div className="mt-4 rounded-[1rem] border border-dashed border-line bg-white/70 p-5">
+                <p className="text-ink">{[place, p.location?.city, p.location?.state].filter(Boolean).join(", ") || d.sharedOnEnquiry}</p>
+                <p className="mt-1 text-sm text-slate">{d.exactShared}</p>
                 {p.mapUrl && /^https:\/\//.test(p.mapUrl) && (
-                  <a href={p.mapUrl} target="_blank" rel="noopener noreferrer" className="link-arrow mt-3 text-sm text-navy">View the area on a map</a>
+                  <a href={p.mapUrl} target="_blank" rel="noopener noreferrer" className="link-arrow mt-3 text-sm text-navy">{d.viewArea}</a>
                 )}
               </div>
             )}
           </section>
 
           <p className="annot-plain mt-10 text-slate">
-            Listing updated {formatDate(p.updatedAt)}
+            {d.updated(f.date(p.updatedAt))}
           </p>
         </div>
 
         <aside className="lg:col-span-5 lg:col-start-8">
           <div className="lg:sticky lg:top-28">
             {preview ? (
-              <div className="border border-dashed border-line bg-white p-6 text-sm text-slate">Enquiry forms are disabled in preview.</div>
+              <div className="rounded-[1rem] border border-dashed border-line bg-white p-6 text-sm text-slate">{d.previewForms}</div>
             ) : open ? (
               <EnquiryPanel
                 subject={{ propertyId: p.id }}
@@ -250,10 +254,10 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
                 whatsappHref={wa}
               />
             ) : (
-              <div className="border border-line bg-white p-6">
-                <p className="font-serif text-2xl text-navy">Looking for something similar?</p>
-                <p className="mt-2 text-slate">Tell us what you need and we'll let you know about comparable properties.</p>
-                <Link href="/contact#enquire" className="btn btn-primary mt-5 w-full">Enquire Now</Link>
+              <div className="surface p-6">
+                <p className="font-serif text-2xl text-navy">{d.similarTitle}</p>
+                <p className="mt-2 text-slate">{d.similarBody}</p>
+                <Link href="/contact#enquire" className="btn btn-primary mt-5 w-full">{t.enquireNow}</Link>
               </div>
             )}
           </div>
@@ -264,8 +268,8 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
         <section className="border-t border-line bg-paper py-16 lg:py-20" aria-labelledby="related-h">
           <div className="wrap">
             <div className="flex items-end justify-between gap-4">
-              <h2 id="related-h" className="text-headline text-navy">You may also consider</h2>
-              <Link href={listHref} className="link-arrow hidden text-emerald sm:inline-flex">See all</Link>
+              <h2 id="related-h" className="text-headline text-navy">{d.related}</h2>
+              <Link href={listHref} className="link-arrow hidden text-emerald sm:inline-flex">{d.seeAll}</Link>
             </div>
             <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {related.map((r) => (

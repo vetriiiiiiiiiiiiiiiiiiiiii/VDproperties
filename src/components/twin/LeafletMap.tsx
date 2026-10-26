@@ -55,5 +55,5 @@ export default function LeafletMap({
     };
   }, [pins, boundary, boundaryStyle]);
 
-  return <div ref={ref} role="region" aria-label={label} style={{ height }} className="z-0 w-full border border-line bg-paper" />;
+  return <div ref={ref} role="region" aria-label={label} style={{ height }} className="z-0 w-full overflow-hidden rounded-[1rem] bg-paper" />;
 }

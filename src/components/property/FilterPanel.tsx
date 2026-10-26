@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { PROJECT_STATUS_LABEL, PROPERTY_TYPE_LABEL } from "@/lib/labels";
-import { AVAILABILITY_OPTIONS, CATEGORY_OPTIONS, type SearchFilters } from "@/lib/search";
+import { useI18n } from "@/i18n/client";
+import { CATEGORY_OPTIONS, type SearchFilters } from "@/lib/search";
 
 type Facets = {
   locations: { slug: string; name: string }[];
@@ -27,6 +27,8 @@ export function FilterPanel({
   scope: "all" | "land" | "homes";
 }) {
   const router = useRouter();
+  const { t } = useI18n();
+  const x = t.listings.filters;
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [amenities, setAmenities] = useState<string[]>(filters.amenities ?? []);
@@ -47,14 +49,14 @@ export function FilterPanel({
   return (
     <>
       <button type="button" className="btn btn-outline w-full text-navy lg:hidden" aria-expanded={open} aria-controls="filters" onClick={() => setOpen(true)}>
-        Filters
+        {x.open}
       </button>
       <div
         id="filters"
         className={`${open ? "fixed inset-0 z-50 flex" : "hidden"} lg:static lg:block`}
         role={open ? "dialog" : undefined}
         aria-modal={open ? true : undefined}
-        aria-label="Filters"
+        aria-label={x.aria}
       >
         {open && <button type="button" tabIndex={-1} aria-hidden="true" className="flex-1 bg-ink/50 lg:hidden" onClick={() => setOpen(false)} />}
         <form
@@ -70,42 +72,42 @@ export function FilterPanel({
             const qs = params.toString();
             startTransition(() => router.push(qs ? `${action}?${qs}` : action));
           }}
-          className="flex w-[min(24rem,90vw)] flex-col overflow-y-auto bg-white lg:w-auto lg:overflow-visible lg:border lg:border-line"
+          className="flex w-[min(24rem,90vw)] flex-col overflow-y-auto bg-white lg:w-auto lg:overflow-visible lg:rounded-[1rem] lg:shadow-[0_24px_48px_-36px_rgba(10,52,104,0.45)]"
         >
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="annot text-emerald">Refine</h2>
-            <button type="button" onClick={() => setOpen(false)} className="text-sm underline lg:hidden">Close</button>
+            <h2 className="annot text-emerald">{x.refine}</h2>
+            <button type="button" onClick={() => setOpen(false)} className="text-sm underline lg:hidden">{x.close}</button>
           </div>
           <div className="flex-1 space-y-6 p-5">
             <div>
-              <label htmlFor="f-q" className="field-label">Keyword or property ID</label>
-              <input id="f-q" name="q" type="search" defaultValue={filters.q ?? ""} placeholder="e.g. corner plot, VDP-0012" className="field" />
+              <label htmlFor="f-q" className="field-label">{x.keyword}</label>
+              <input id="f-q" name="q" type="search" defaultValue={filters.q ?? ""} placeholder={x.keywordPlaceholder} className="field" />
             </div>
             {scope === "all" && (
               <div>
-                <label htmlFor="f-cat" className="field-label">Category</label>
+                <label htmlFor="f-cat" className="field-label">{x.category}</label>
                 <select id="f-cat" name="category" defaultValue={filters.category ?? ""} className="field">
-                  <option value="">All categories</option>
-                  {Object.entries(CATEGORY_OPTIONS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
+                  <option value="">{x.allCategories}</option>
+                  {(Object.keys(CATEGORY_OPTIONS) as (keyof typeof CATEGORY_OPTIONS)[]).map((v) => (
+                    <option key={v} value={v}>{x.categories[v]}</option>
                   ))}
                 </select>
               </div>
             )}
             <div>
-              <label htmlFor="f-type" className="field-label">Property type</label>
+              <label htmlFor="f-type" className="field-label">{x.type}</label>
               <select id="f-type" name="type" defaultValue={filters.type ?? ""} className="field">
-                <option value="">Any</option>
-                {typeOptions.map((t) => (
-                  <option key={t} value={t}>{PROPERTY_TYPE_LABEL[t]}</option>
+                <option value="">{x.any}</option>
+                {typeOptions.map((v) => (
+                  <option key={v} value={v}>{t.labels.propertyType[v]}</option>
                 ))}
               </select>
             </div>
             {facets.locations.length > 0 && (
               <div>
-                <label htmlFor="f-loc" className="field-label">Location</label>
+                <label htmlFor="f-loc" className="field-label">{x.location}</label>
                 <select id="f-loc" name="location" defaultValue={filters.location ?? ""} className="field">
-                  <option value="">Any location</option>
+                  <option value="">{x.anyLocation}</option>
                   {facets.locations.map((l) => (
                     <option key={l.slug} value={l.slug}>{l.name}</option>
                   ))}
@@ -114,65 +116,65 @@ export function FilterPanel({
             )}
             {facets.hasPrices && (
               <fieldset>
-                <legend className="field-label">Budget (₹)</legend>
+                <legend className="field-label">{x.budget}</legend>
                 <div className="grid grid-cols-2 gap-2">
-                  <input aria-label="Minimum budget in rupees" name="minPrice" type="number" min={0} step={50000} inputMode="numeric" defaultValue={filters.minPrice ?? ""} placeholder="Min" className="field" />
-                  <input aria-label="Maximum budget in rupees" name="maxPrice" type="number" min={0} step={50000} inputMode="numeric" defaultValue={filters.maxPrice ?? ""} placeholder="Max" className="field" />
+                  <input aria-label={x.minBudget} name="minPrice" type="number" min={0} step={50000} inputMode="numeric" defaultValue={filters.minPrice ?? ""} placeholder="Min" className="field" />
+                  <input aria-label={x.maxBudget} name="maxPrice" type="number" min={0} step={50000} inputMode="numeric" defaultValue={filters.maxPrice ?? ""} placeholder="Max" className="field" />
                 </div>
-                <p className="field-hint">Listings marked “Contact for price” aren't included when a budget is set.</p>
+                <p className="field-hint">{x.budgetHint}</p>
               </fieldset>
             )}
             {showLand && (
               <fieldset>
-                <legend className="field-label">Land area (sq ft)</legend>
+                <legend className="field-label">{x.landArea}</legend>
                 <div className="grid grid-cols-2 gap-2">
-                  <input aria-label="Minimum land area in square feet" name="minLand" type="number" min={0} inputMode="numeric" defaultValue={filters.minLand ?? ""} placeholder="Min" className="field" />
-                  <input aria-label="Maximum land area in square feet" name="maxLand" type="number" min={0} inputMode="numeric" defaultValue={filters.maxLand ?? ""} placeholder="Max" className="field" />
+                  <input aria-label={x.minArea} name="minLand" type="number" min={0} inputMode="numeric" defaultValue={filters.minLand ?? ""} placeholder="Min" className="field" />
+                  <input aria-label={x.maxArea} name="maxLand" type="number" min={0} inputMode="numeric" defaultValue={filters.maxLand ?? ""} placeholder="Max" className="field" />
                 </div>
               </fieldset>
             )}
             {showHomes && (
               <fieldset>
-                <legend className="field-label">Built-up area (sq ft)</legend>
+                <legend className="field-label">{x.builtArea}</legend>
                 <div className="grid grid-cols-2 gap-2">
-                  <input aria-label="Minimum built-up area in square feet" name="minBuilt" type="number" min={0} inputMode="numeric" defaultValue={filters.minBuilt ?? ""} placeholder="Min" className="field" />
-                  <input aria-label="Maximum built-up area in square feet" name="maxBuilt" type="number" min={0} inputMode="numeric" defaultValue={filters.maxBuilt ?? ""} placeholder="Max" className="field" />
+                  <input aria-label={x.minArea} name="minBuilt" type="number" min={0} inputMode="numeric" defaultValue={filters.minBuilt ?? ""} placeholder="Min" className="field" />
+                  <input aria-label={x.maxArea} name="maxBuilt" type="number" min={0} inputMode="numeric" defaultValue={filters.maxBuilt ?? ""} placeholder="Max" className="field" />
                 </div>
               </fieldset>
             )}
             {scope !== "land" && facets.bedroomOptions.length > 0 && (
               <div>
-                <label htmlFor="f-beds" className="field-label">Bedrooms</label>
+                <label htmlFor="f-beds" className="field-label">{x.bedrooms}</label>
                 <select id="f-beds" name="beds" defaultValue={filters.beds ?? ""} className="field">
-                  <option value="">Any</option>
+                  <option value="">{x.any}</option>
                   {facets.bedroomOptions.map((b) => (
-                    <option key={b} value={b}>{b}+ bedrooms</option>
+                    <option key={b} value={b}>{x.bedsPlus(b)}</option>
                   ))}
                 </select>
               </div>
             )}
             <div>
-              <label htmlFor="f-av" className="field-label">Availability</label>
+              <label htmlFor="f-av" className="field-label">{x.availability}</label>
               <select id="f-av" name="availability" defaultValue={filters.availability ?? ""} className="field">
-                <option value="">{AVAILABILITY_OPTIONS.current}</option>
-                <option value="available">{AVAILABILITY_OPTIONS.available}</option>
-                <option value="all">{AVAILABILITY_OPTIONS.all}</option>
+                <option value="">{x.availabilityOpts.current}</option>
+                <option value="available">{x.availabilityOpts.available}</option>
+                <option value="all">{x.availabilityOpts.all}</option>
               </select>
             </div>
             {facets.projectStatuses.length > 0 && (
               <div>
-                <label htmlFor="f-ps" className="field-label">Project status</label>
+                <label htmlFor="f-ps" className="field-label">{x.projectStatus}</label>
                 <select id="f-ps" name="projectStatus" defaultValue={filters.projectStatus ?? ""} className="field">
-                  <option value="">Any</option>
+                  <option value="">{x.any}</option>
                   {facets.projectStatuses.map((s) => (
-                    <option key={s} value={s}>{PROJECT_STATUS_LABEL[s]} project</option>
+                    <option key={s} value={s}>{x.projectOpt(t.labels.projectStatus[s])}</option>
                   ))}
                 </select>
               </div>
             )}
             {facets.amenities.length > 0 && (
               <fieldset>
-                <legend className="field-label">Amenities & infrastructure</legend>
+                <legend className="field-label">{x.amenities}</legend>
                 <input type="hidden" name="amenities" value={amenities.join(",")} />
                 <ul className="mt-1 space-y-2">
                   {facets.amenities.map((a) => (
@@ -193,11 +195,11 @@ export function FilterPanel({
             )}
             {filters.sort && <input type="hidden" name="sort" value={filters.sort} />}
           </div>
-          <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white p-5">
+          <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/85 p-5 backdrop-blur lg:rounded-b-[1.75rem]">
             <button type="submit" className="btn btn-primary flex-1" disabled={pending} aria-busy={pending}>
-              {pending ? "Updating…" : "Apply filters"}
+              {pending ? x.updating : x.apply}
             </button>
-            <a href={action} className="btn btn-outline text-navy">Clear</a>
+            <a href={action} className="btn btn-outline text-navy">{x.clear}</a>
           </div>
         </form>
       </div>

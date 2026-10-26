@@ -6,7 +6,7 @@ import { PropertyCard } from "@/components/property/PropertyCard";
 import { Breadcrumbs, ProjectStatusBadge, SampleTag } from "@/components/site/ui";
 import { db } from "@/lib/db";
 import { phoneHref, whatsappHref } from "@/lib/format";
-import { PROJECT_STATUS_LABEL } from "@/lib/labels";
+import { alternates, getI18n } from "@/i18n/server";
 import { cardInclude, getPublishedProject, toCard } from "@/lib/queries";
 import { getSettings } from "@/lib/settings";
 import { VISIT_WINDOW_DAYS } from "@/lib/validation";
@@ -17,12 +17,13 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const pr = await getPublishedProject((await params).slug);
-  if (!pr) return { title: "Project not found", robots: { index: false } };
+  const { t } = await getI18n();
+  if (!pr) return { title: t.listings.projects.notFound, robots: { index: false } };
   const photo = pr.images.find((i) => !i.url.startsWith("placeholder:"));
   return {
     title: pr.seoTitle ?? pr.name,
-    description: pr.seoDescription ?? pr.summary ?? `${pr.name} — a ${PROJECT_STATUS_LABEL[pr.status].toLowerCase()} project by V D Properties.`,
-    alternates: { canonical: `/projects/${pr.slug}` },
+    description: pr.seoDescription ?? pr.summary ?? t.listings.projects.metaFallback(pr.name, t.labels.projectStatus[pr.status].toLocaleLowerCase()),
+    alternates: await alternates(`/projects/${pr.slug}`),
     robots: pr.isSample ? { index: false } : undefined,
     openGraph: photo ? { images: [{ url: photo.url, alt: photo.alt }] } : undefined,
   };
@@ -31,6 +32,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProjectPage({ params }: Props) {
   const pr = await getPublishedProject((await params).slug);
   if (!pr) notFound();
+  const { t } = await getI18n();
+  const x = t.listings.projects;
   const [settings, listings] = await Promise.all([
     getSettings(),
     db.property.findMany({ where: { projectId: pr.id, publication: "PUBLISHED" }, include: cardInclude, orderBy: [{ availability: "asc" }, { title: "asc" }] }),
@@ -39,7 +42,7 @@ export default async function ProjectPage({ params }: Props) {
   return (
     <article>
       <div className="wrap pb-6 pt-8">
-        <Breadcrumbs items={[{ label: pr.status === "COMPLETED" ? "Completed projects" : "Ongoing projects", href: listPath }, { label: pr.name }]} />
+        <Breadcrumbs items={[{ label: pr.status === "COMPLETED" ? x.completed.title : x.ongoing.title, href: listPath }, { label: pr.name }]} />
       </div>
       <div className="wrap">
         <Gallery title={pr.name} images={pr.images.map((i) => ({ url: i.url, alt: i.alt, kind: "PHOTO" as const }))} />
@@ -60,8 +63,8 @@ export default async function ProjectPage({ params }: Props) {
           )}
           {pr.highlights && (
             <section className="mt-12">
-              <h2 className="annot text-emerald">Highlights</h2>
-              <ul className="mt-4 divide-y divide-line border-y border-line">
+              <h2 className="annot text-emerald">{x.highlights}</h2>
+              <ul className="surface mt-4 divide-y divide-line px-5">
                 {pr.highlights.split("\n").filter(Boolean).map((h) => (
                   <li key={h} className="py-3 text-ink">{h}</li>
                 ))}
@@ -70,7 +73,7 @@ export default async function ProjectPage({ params }: Props) {
           )}
           {pr.approvalInfo && (
             <section className="mt-12">
-              <h2 className="annot text-emerald">Approvals & registration</h2>
+              <h2 className="annot text-emerald">{x.approvals}</h2>
               <p className="prose-vd mt-4 whitespace-pre-line">{pr.approvalInfo}</p>
             </section>
           )}
@@ -80,13 +83,13 @@ export default async function ProjectPage({ params }: Props) {
             <EnquiryPanel
               subject={{ projectId: pr.id }}
               label={pr.name}
-              noun="Project"
+              noun={t.listings.panel.project}
               canVisit
               visit={{ closedWeekdays: settings.visitClosedWeekdays, blackoutDates: settings.visitBlackoutDates, maxDays: VISIT_WINDOW_DAYS }}
               businessName={settings.businessName}
               phoneHref={settings.phone ? `tel:${phoneHref(settings.phone)}` : undefined}
               phone={settings.phone ?? undefined}
-              whatsappHref={settings.whatsapp ? whatsappHref(settings.whatsapp, `Hello, I'm interested in ${pr.name}`) : undefined}
+              whatsappHref={settings.whatsapp ? whatsappHref(settings.whatsapp, x.whatsappText(pr.name)) : undefined}
             />
           </div>
         </aside>
@@ -94,7 +97,7 @@ export default async function ProjectPage({ params }: Props) {
       {listings.length > 0 && (
         <section className="border-t border-line bg-paper py-16" aria-labelledby="pl-h">
           <div className="wrap">
-            <h2 id="pl-h" className="text-headline text-navy">Listings in {pr.name}</h2>
+            <h2 id="pl-h" className="text-headline text-navy">{x.listingsTitle(pr.name)}</h2>
             <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {listings.map((l) => (
                 <li key={l.id}><PropertyCard p={toCard(l)} /></li>

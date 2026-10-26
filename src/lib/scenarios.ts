@@ -6,8 +6,9 @@ export type ScenarioResult = {
   footprintSqft: number;
   coveragePct: number;
   plotAreaSqft: number;
-  warnings: { level: string; text: string }[];
-  estimate: { total: number; complete: boolean; missing: string[]; lines: { key: string; label: string; amount: number | null; basis: string }[] };
+  // Older scenarios stored English text; newer ones store message codes.
+  warnings: { level: string; code?: string; params?: Record<string, string | number>; text?: string }[];
+  estimate: { total: number; complete: boolean; missing: string[]; lines: { key: string; label?: string; amount: number | null; basis: string }[] };
   card: { name: string; source: string; effectiveDate: string; isDemo: boolean } | null;
 };
 
@@ -29,9 +30,14 @@ export function scenarioStatus(s: PlanningScenario & { property: Pick<Property, 
   const snap = s.plotSnapshot as { illustrative?: boolean };
   if (snap?.illustrative) return { kind: "illustrative" as const, note: "Illustrative plot" };
   if (!s.property || s.property.publication !== "PUBLISHED") return { kind: "gone" as const, note: "This property is no longer listed" };
-  if (s.property.availability === "SOLD" || s.property.availability === "UNAVAILABLE") return { kind: "unavailable" as const, note: `Property is now ${s.property.availability.toLowerCase()}` };
+  if (s.property.availability === "SOLD" || s.property.availability === "UNAVAILABLE") return { kind: "unavailable" as const, note: `Property is now ${s.property.availability.toLowerCase()}`, availability: s.property.availability };
   if (s.propertyUpdatedAt && s.property.updatedAt > s.propertyUpdatedAt) return { kind: "stale" as const, note: "Property details changed since you saved — the estimate may need updating" };
   return { kind: "current" as const, note: "Up to date" };
+}
+
+/** The status note in the visitor's language. */
+export function scenarioNote(st: ReturnType<typeof scenarioStatus>, d: { status: { illustrative: string; gone: string; unavailable: (s: string) => string; stale: string; current: string } }, availability: (a: Property["availability"]) => string) {
+  return st.kind === "unavailable" ? d.status.unavailable(availability(st.availability).toLocaleLowerCase()) : d.status[st.kind];
 }
 
 /** Rebuilds the Studio URL so a scenario can be reopened with the same choices. */

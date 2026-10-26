@@ -10,17 +10,18 @@ A real-estate platform for V D Properties: a public website for residential plot
 
 1. [What's included](#whats-included)
 2. [Tech stack](#tech-stack)
-3. [Quick start (local)](#quick-start-local)
-4. [Environment variables](#environment-variables)
-5. [Database & migrations](#database--migrations)
-6. [Admin accounts & roles](#admin-accounts--roles)
-7. [Before launch: content onboarding](#before-launch-content-onboarding)
-8. [Deployment](#deployment)
-9. [Testing](#testing)
-10. [Security notes](#security-notes)
-11. [SEO notes](#seo-notes)
-12. [Project structure](#project-structure)
-13. [Known limitations](#known-limitations)
+3. [Languages: English & Tamil](#languages-english--tamil)
+4. [Quick start (local)](#quick-start-local)
+5. [Environment variables](#environment-variables)
+6. [Database & migrations](#database--migrations)
+7. [Admin accounts & roles](#admin-accounts--roles)
+8. [Before launch: content onboarding](#before-launch-content-onboarding)
+9. [Deployment](#deployment)
+10. [Testing](#testing)
+11. [Security notes](#security-notes)
+12. [SEO notes](#seo-notes)
+13. [Project structure](#project-structure)
+14. [Known limitations](#known-limitations)
 
 ---
 
@@ -66,7 +67,7 @@ A real-estate platform for V D Properties: a public website for residential plot
 - **Nodemailer** for optional staff notifications over SMTP
 - **Vitest** (unit) and **Playwright** (end-to-end) tests
 
-Fonts: Newsreader (editorial serif), Manrope (sans) and IBM Plex Mono (technical annotations), self-hosted at build time via `next/font`.
+Fonts: Newsreader (editorial serif), Manrope (sans) and IBM Plex Mono (technical annotations), plus Noto Serif Tamil and Catamaran for Tamil, all self-hosted at build time via `next/font`. Tamil fonts are only downloaded when Tamil text is on the page.
 
 ## Platform products
 
@@ -90,11 +91,24 @@ Four connected experiences share one source of truth: the `Property` records, cu
 - **Logo**: the official artwork lives in `brand/vd-properties-logo.png`. `node scripts/brand-assets.mjs` turns it into a transparent full logo, an emblem-only mark (`public/brand/`), the favicon (`src/app/icon.png`) and Apple touch icon. Re-run it whenever the source file changes. The header, footer, admin and sign-in page use the emblem with a live-text wordmark, so it stays legible on light and dark backgrounds.
 - **Palette**: sampled from the logo (leaf greens, navy, metallic gold, sunrise red-orange) and defined as tokens in `src/app/globals.css`.
 - **Graphics built from the logo's own motifs** (`src/components/site/brand/`):
-  - `SunriseScene`: the homepage hero. A sun rises behind gold skyline bars that grow one by one, cloud streaks drift, leaf-green land layers in and a survey-line plot boundary draws itself. On scroll, the sun sinks and the land separates in depth. A hero photo uploaded in settings appears inside the sun.
+  - **Homepage hero** (`FeaturedShowcase`): a split layout. On the left are a serif headline, two calls to action and live counts of available plots, available homes and locations. On the right, up to four featured listings that are still on offer are shown one at a time: the listing's own photo with a slow push-in, and a caption bar with status, reference, type, locality, area, price and a link to the listing. Listings crossfade every 6.5 seconds, pausing on hover, keyboard focus or reduced motion, with previous, pause and next controls. Feature listings in Admin → Properties to choose what appears; with none featured, a short invitation to enquire shows instead. (The hero photo setting isn't used on the homepage.)
+  - `InkSun`: the hand-drawn sun used in page headers.
   - `PlotExplorer`: an interactive site plan where every parcel is a real plot listing (coloured by status). Hover, focus or tap a parcel to read its recorded details.
   - `InventorySkyline`: the logo's gold buildings used as a real chart, one building per location, with height equal to its open listings.
   - `LeafWave` dividers, the `FooterSunset` closing scene, a sunrise scroll-progress line and the rotating headline word.
-- **Motion** uses CSS only (transforms, opacity and scroll-driven timelines): no animation library, no scroll hijacking. Everything is disabled under `prefers-reduced-motion`, and browsers without scroll-timeline support simply show the finished state.
+- **Motion** uses CSS only (transforms, opacity, stroke drawing and scroll-driven timelines): no animation library, no WebGL, no scroll hijacking. Liquid motion is kept to things you use: the segmented toggles, PlotFit choice tiles, the score rings and the "drop" that travels the platform journey. Everything is disabled under `prefers-reduced-motion`, and browsers without scroll-timeline support simply show the finished state.
+
+## Languages: English & Tamil
+
+English is the default and has no URL prefix (`/plots`). Tamil lives under `/ta` (`/ta/plots`), and `/en/...` redirects to the unprefixed English URL. The **EN | தமிழ்** switch in the header and mobile menu keeps you on the same page, with the same filters. Once you choose a language, every link, form, redirect and message stays in it.
+
+- **How it works**: `src/middleware.ts` reads the prefix and rewrites `/ta/...` to the same route, passing the language in a request header. No pages are duplicated. Server components call `getI18n()` (`src/i18n/server.ts`), client components call `useI18n()` (`src/i18n/client.tsx`), and `@/i18n/Link` adds the prefix automatically.
+- **Interface text** is in typed dictionaries in `src/i18n/dict/` (one file per area). The Tamil dictionary is type-checked against the English one, and a unit test fails if any key is missing or empty.
+- **Calculated text** (PlotFit reasons, Studio warnings, budget lines) comes back from the engines as message codes and is worded in the visitor's language. Validation and server messages from the forms and account actions are translated too.
+- **Content entered by staff** (listing titles and descriptions, project text, About/FAQ/policy text in settings) can be given a Tamil version in the `translations` field (`{ "ta": { "title": "…" } }`) on properties, projects and site settings. Tamil pages use it wherever it's filled in and fall back to English otherwise; English pages never change. Default privacy and terms text has a Tamil version that states the English text prevails. The admin dashboard doesn't have Tamil input fields yet, so for now these values are set directly in the database.
+- **Before launch**, have a native Tamil speaker review the dictionaries and the default policy text. They were written carefully but haven't been professionally proofread.
+- **SEO**: every page declares `hreflang` alternates (`en-IN`, `ta-IN`, `x-default`), and `<html lang>` matches the page.
+- **Adding a language later**: add it to `LOCALES` in `src/i18n/config.ts`, add a dictionary object typed against English, and extend the middleware prefix pattern.
 
 ## Quick start (local)
 

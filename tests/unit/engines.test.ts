@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { criteriaToQuery, matchProperties, parseCriteria, type MatchProperty } from "@/lib/plotfit";
+import type { Locale } from "@/i18n/config";
+import { DICTS } from "@/i18n/dict";
+import { makeFormat } from "@/i18n/format";
+import { criteriaToQuery, matchProperties, parseCriteria, type MatchProperty, type Msg } from "@/lib/plotfit";
 import { estimateBudget, type CostCard } from "@/lib/studio/estimate";
-import { assumedSetbacks, DEFAULT_INPUTS, generateLayout, northArrowAngle, partition, type PlotGeometry } from "@/lib/studio/layout";
+import { assumedSetbacks, DEFAULT_INPUTS, generateLayout, northArrowAngle, partition, type PlotGeometry, type Warning } from "@/lib/studio/layout";
+
+// Engines return message codes; these render them the way the pages do.
+const warn = (w: Warning, l: Locale = "en") => w.text ?? DICTS[l].studio.warnings[w.code](w.params ?? {});
+const say = (m: Msg, l: Locale = "en") => DICTS[l].plotfit.msg(makeFormat(l), (k) => DICTS[l].twin.facilities[k])[m.code](m.params ?? {});
+const says = (ms: Msg[], l: Locale = "en") => ms.map((m) => say(m, l)).join(" ");
 
 const plot = (w: number, d: number, extra: Partial<PlotGeometry> = {}): PlotGeometry => ({
   widthFt: w, depthFt: d, setbacks: assumedSetbacks(w, d), setbackSource: "ASSUMED", maxCoveragePct: null, coverageSource: null, frontBearing: null, illustrative: false, ...extra,
@@ -23,7 +31,11 @@ describe("layout engine", () => {
   it("reports a shortfall rather than overbuilding", () => {
     const r = generateLayout(plot(25, 35), { ...DEFAULT_INPUTS, builtUpSqft: 4000, floors: 1 });
     expect(r.achievedBuiltUpSqft).toBeLessThan(4000);
-    expect(r.warnings.some((w) => /less than/.test(w.text))).toBe(true);
+    expect(r.warnings.some((w) => /less than/.test(warn(w)))).toBe(true);
+    // The same warning renders in Tamil, with the numbers carried through.
+    const ta = r.warnings.map((w) => warn(w, "ta")).join(" ");
+    expect(ta).toMatch(/[\u0B80-\u0BFF]/);
+    expect(ta).toContain("4,000");
   });
 
   it("responds to inputs: more floors means a smaller footprint", () => {
@@ -35,7 +47,7 @@ describe("layout engine", () => {
   it("flags coverage above a recorded limit as a blocker", () => {
     const r = generateLayout(plot(30, 40, { maxCoveragePct: 40, coverageSource: "RECORD" }), { ...DEFAULT_INPUTS, floors: 1, builtUpSqft: 700, parkingSlots: 0, garden: false });
     expect(r.feasible).toBe(false);
-    expect(r.warnings.find((w) => w.level === "blocker")?.text).toMatch(/recorded for this plot/);
+    expect(warn(r.warnings.find((w) => w.level === "blocker")!)).toMatch(/recorded for this plot/);
   });
 
   it("refuses plots too small after setbacks", () => {
@@ -100,26 +112,27 @@ describe("PlotFit", () => {
       c,
     );
     expect(r.matches.map((m) => m.property.id)).toEqual(["1"]);
-    expect(r.excluded.map((e) => e.reason).join(" ")).toMatch(/No longer available.*above.*Not land/);
+    expect(says(r.excluded.map((e) => e.reason))).toMatch(/No longer available.*above.*Not land/);
+    expect(r.excluded.map((e) => e.reason.code)).toEqual(["unavailable", "overBudget", "notLand"]);
   });
 
   it("puts unpriced properties in needs-information, never in matches", () => {
     const r = matchProperties([{ ...base, price: null }], parseCriteria({ budget: "4000000" }));
     expect(r.matches).toHaveLength(0);
-    expect(r.needsInfo[0].unknowns[0]).toMatch(/price isn't published/);
+    expect(say(r.needsInfo[0].unknowns[0])).toMatch(/price isn't published/);
   });
 
   it("explains location fit and compromises", () => {
     const r = matchProperties([base, { ...base, id: "2", referenceCode: "VDP-2", locationSlug: "east", locationName: "East" }], parseCriteria({ locations: "north" }));
     expect(r.matches[0].property.id).toBe("1");
-    expect(r.matches[0].reasons.join(" ")).toMatch(/preferred locations/);
-    expect(r.matches[1].compromises.join(" ")).toMatch(/didn't select/);
+    expect(says(r.matches[0].reasons)).toMatch(/preferred locations/);
+    expect(says(r.matches[1].compromises)).toMatch(/didn't select/);
   });
 
   it("checks house fit using the layout engine and flags assumed setbacks", () => {
     const r = matchProperties([base], parseCriteria({ builtUp: "1400", bedrooms: "3" }));
-    expect(r.matches[0].reasons.join(" ")).toMatch(/fits on the 30 × 40 ft plot/);
-    expect(r.matches[0].unknowns.join(" ")).toMatch(/Setbacks/);
+    expect(says(r.matches[0].reasons)).toMatch(/fits on the 30 × 40 ft plot/);
+    expect(says(r.matches[0].unknowns)).toMatch(/Setbacks/);
   });
 
   it("serialises criteria to a shareable query", () => {

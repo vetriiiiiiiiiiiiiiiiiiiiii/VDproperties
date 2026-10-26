@@ -1,17 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useI18n } from "@/i18n/client";
 import { Consent, FormStatus, Honeypot, NativeFallback, SelectField, SubmitButton, TextArea, TextField } from "./fields";
 import { useLeadForm } from "./useLeadForm";
 
 export type VisitOption = { value: string; label: string };
 
-const SLOTS = [
-  ["MORNING", "Morning · 9–11 am"],
-  ["MIDDAY", "Midday · 11 am–1 pm"],
-  ["AFTERNOON", "Afternoon · 2–4 pm"],
-  ["EVENING", "Evening · 4–6 pm"],
-] as const;
+const SLOTS = ["MORNING", "MIDDAY", "AFTERNOON", "EVENING"] as const;
 
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -32,6 +28,8 @@ export function SiteVisitForm({
   maxDays: number;
   businessName?: string;
 }) {
+  const { t } = useI18n();
+  const v = t.forms.visit;
   const { state, submit, err, reset, startedAt } = useLeadForm("/api/site-visits");
   const [subject, setSubject] = useState(selected ?? "");
   const [date, setDate] = useState("");
@@ -46,14 +44,14 @@ export function SiteVisitForm({
     return { min: iso(a), max: iso(b) };
   }, [maxDays]);
 
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayNames = v.days;
 
   function checkDate(v: string) {
     setDate(v);
     if (!v) return setLocalError(undefined);
     const day = new Date(`${v}T00:00:00`).getDay();
-    if (closedWeekdays.includes(day)) return setLocalError(`Site visits aren't available on ${dayNames[day]}s. Please choose another date.`);
-    if (blackoutDates.includes(v)) return setLocalError("Site visits aren't available on this date. Please choose another.");
+    if (closedWeekdays.includes(day)) return setLocalError(t.forms.visit.closedDay(dayNames[day]));
+    if (blackoutDates.includes(v)) return setLocalError(t.forms.visit.blackout);
     setLocalError(undefined);
   }
 
@@ -62,7 +60,7 @@ export function SiteVisitForm({
       <FormStatus
         state={state}
         onReset={reset}
-        next="This is a request, not a confirmed appointment. Our team will call you to agree a time that works, and the visit is only booked once we've confirmed it with you."
+        next={v.next}
       />
     );
 
@@ -88,23 +86,23 @@ export function SiteVisitForm({
       ) : (
         <SelectField
           name="subject"
-          label="Property or project to visit"
+          label={v.subject}
           required
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           error={err("propertyId")}
-          hint={empty ? "There are no listings open for visits right now. Send us an enquiry instead." : undefined}
+          hint={empty ? v.noneOpen : undefined}
         >
-          <option value="">Choose…</option>
+          <option value="">{v.choose}</option>
           {options.properties.length > 0 && (
-            <optgroup label="Properties">
+            <optgroup label={v.properties}>
               {options.properties.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </optgroup>
           )}
           {options.projects.length > 0 && (
-            <optgroup label="Projects">
+            <optgroup label={v.projects}>
               {options.projects.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
@@ -115,7 +113,7 @@ export function SiteVisitForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField
           name="preferredDate"
-          label="Preferred date"
+          label={v.date}
           type="date"
           required
           min={min}
@@ -123,26 +121,26 @@ export function SiteVisitForm({
           value={date}
           onChange={(e) => checkDate(e.target.value)}
           error={localError ?? err("preferredDate")}
-          hint={closedWeekdays.length ? `Not available on ${closedWeekdays.map((d) => dayNames[d]).join(", ")}` : undefined}
+          hint={closedWeekdays.length ? v.notAvailableOn(closedWeekdays.map((d) => dayNames[d]).join(", ")) : undefined}
         />
-        <SelectField name="timeSlot" label="Preferred time" required defaultValue="" error={err("timeSlot")}>
-          <option value="" disabled>Choose a time range</option>
-          {SLOTS.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+        <SelectField name="timeSlot" label={v.time} required defaultValue="" error={err("timeSlot")}>
+          <option value="" disabled>{v.chooseTime}</option>
+          {SLOTS.map((slot) => (
+            <option key={slot} value={slot}>{t.labels.timeSlot[slot]}</option>
           ))}
         </SelectField>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
-        <TextField name="name" label="Your name" required autoComplete="name" error={err("name")} />
-        <TextField name="phone" label="Phone number" required type="tel" inputMode="tel" autoComplete="tel" error={err("phone")} />
+        <TextField name="name" label={t.forms.yourName} required autoComplete="name" error={err("name")} />
+        <TextField name="phone" label={t.forms.phone} required type="tel" inputMode="tel" autoComplete="tel" error={err("phone")} />
       </div>
-      <TextField name="email" label="Email" type="email" autoComplete="email" error={err("email")} />
-      <TextArea name="message" label="Anything we should know?" maxLength={1000} error={err("message")} />
+      <TextField name="email" label={t.forms.email} type="email" autoComplete="email" error={err("email")} />
+      <TextArea name="message" label={v.anything} maxLength={1000} error={err("message")} />
       <Consent error={err("consent")} businessName={businessName} />
       <FormStatus state={state} onReset={reset} next="" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SubmitButton state={state} label="Request site visit" />
-        <p className="text-xs text-slate">A request is confirmed only when our team calls you back.</p>
+        <SubmitButton state={state} label={v.submit} />
+        <p className="text-xs text-slate">{v.footnote}</p>
       </div>
     </form>
   );

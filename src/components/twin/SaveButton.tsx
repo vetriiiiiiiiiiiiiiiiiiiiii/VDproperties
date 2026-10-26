@@ -1,19 +1,21 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/i18n/Link";
+import { useI18n } from "@/i18n/client";
 import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toggleSavedProperty } from "@/app/account/_actions/customer";
 
 export function SaveButton({ propertyId, saved, signedIn, className = "" }: { propertyId: string; saved: boolean; signedIn: boolean; className?: string }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [isSaved, setSaved] = useState(saved);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   if (!signedIn)
     return (
       <Link href={`/account/login?next=${encodeURIComponent(pathname)}`} className={`btn btn-outline text-navy ${className}`}>
-        ☆ Sign in to save
+        {t.listings.save.signIn}
       </Link>
     );
   return (
@@ -31,7 +33,7 @@ export function SaveButton({ propertyId, saved, signedIn, className = "" }: { pr
           })
         }
       >
-        {isSaved ? "★ Saved" : "☆ Save to shortlist"}
+        {isSaved ? t.listings.save.saved : t.listings.save.save}
       </button>
       {msg && <span role="status" className="mt-1 text-xs text-slate">{msg}</span>}
     </span>

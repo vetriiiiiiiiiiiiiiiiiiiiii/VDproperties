@@ -1,16 +1,17 @@
 "use client";
 
+import { useI18n } from "@/i18n/client";
 import { Consent, FormStatus, Honeypot, NativeFallback, SelectField, SubmitButton, TextArea, TextField } from "./fields";
 import { useLeadForm } from "./useLeadForm";
 
-export const BUDGET_RANGES = ["Under ₹25 lakh", "₹25–50 lakh", "₹50 lakh–₹1 crore", "₹1–2 crore", "Above ₹2 crore", "Not sure yet"];
-export const START_TIMEFRAMES = ["Within 3 months", "3–6 months", "6–12 months", "More than a year", "Just exploring"];
 
 export function ConstructionForm({ businessName }: { businessName?: string }) {
+  const { t } = useI18n();
+  const c = t.forms.construction;
   const { state, submit, err, reset, startedAt } = useLeadForm("/api/enquiries");
 
   if (state.status === "success")
-    return <FormStatus state={state} onReset={reset} next="Our team will review your requirements and call you to talk them through. Nothing is committed until you've discussed and agreed the details with us." />;
+    return <FormStatus state={state} onReset={reset} next={c.next} />;
 
   return (
     <form
@@ -26,38 +27,38 @@ export function ConstructionForm({ businessName }: { businessName?: string }) {
       <Honeypot />
       <NativeFallback startedAt={startedAt} values={{ type: "CONSTRUCTION" }} />
       <fieldset className="space-y-5">
-        <legend className="annot text-emerald">About the site</legend>
+        <legend className="annot text-emerald">{c.aboutSite}</legend>
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField name="siteLocation" label="Plot location" placeholder="Area, town or city" error={err("siteLocation")} />
-          <SelectField name="hasLand" label="Do you already own the land?" defaultValue="">
-            <option value="">Prefer not to say</option>
-            <option value="yes">Yes, I have a plot</option>
-            <option value="no">No, I need help finding one</option>
+          <TextField name="siteLocation" label={c.siteLocation} placeholder={c.siteLocationPlaceholder} error={err("siteLocation")} />
+          <SelectField name="hasLand" label={c.ownLand} defaultValue="">
+            <option value="">{c.preferNot}</option>
+            <option value="yes">{c.haveLand}</option>
+            <option value="no">{c.needLand}</option>
           </SelectField>
-          <TextField name="plotAreaSqft" label="Approximate plot area (sq ft)" type="number" inputMode="numeric" min={1} error={err("plotAreaSqft")} />
-          <TextField name="houseSizeSqft" label="Preferred house size (sq ft)" type="number" inputMode="numeric" min={1} error={err("houseSizeSqft")} />
-          <SelectField name="budgetRange" label="Expected budget" defaultValue="" error={err("budgetRange")}>
-            <option value="">Choose a range</option>
-            {BUDGET_RANGES.map((b) => <option key={b}>{b}</option>)}
+          <TextField name="plotAreaSqft" label={c.plotArea} type="number" inputMode="numeric" min={1} error={err("plotAreaSqft")} />
+          <TextField name="houseSizeSqft" label={c.houseSize} type="number" inputMode="numeric" min={1} error={err("houseSizeSqft")} />
+          <SelectField name="budgetRange" label={c.budget} defaultValue="" error={err("budgetRange")}>
+            <option value="">{c.chooseRange}</option>
+            {c.budgets.map((b) => <option key={b}>{b}</option>)}
           </SelectField>
-          <SelectField name="startTimeframe" label="When would you like to start?" defaultValue="" error={err("startTimeframe")}>
-            <option value="">Choose…</option>
-            {START_TIMEFRAMES.map((b) => <option key={b}>{b}</option>)}
+          <SelectField name="startTimeframe" label={c.start} defaultValue="" error={err("startTimeframe")}>
+            <option value="">{t.forms.visit.choose}</option>
+            {c.timeframes.map((b) => <option key={b}>{b}</option>)}
           </SelectField>
         </div>
       </fieldset>
       <fieldset className="space-y-5 border-t border-line pt-6">
-        <legend className="annot text-emerald">Your details</legend>
+        <legend className="annot text-emerald">{c.yourDetails}</legend>
         <div className="grid gap-5 sm:grid-cols-2">
-          <TextField name="name" label="Your name" required autoComplete="name" error={err("name")} />
-          <TextField name="phone" label="Phone number" required type="tel" inputMode="tel" autoComplete="tel" error={err("phone")} />
+          <TextField name="name" label={t.forms.yourName} required autoComplete="name" error={err("name")} />
+          <TextField name="phone" label={t.forms.phone} required type="tel" inputMode="tel" autoComplete="tel" error={err("phone")} />
         </div>
-        <TextField name="email" label="Email" type="email" autoComplete="email" error={err("email")} />
-        <TextArea name="message" label="Tell us about the home you have in mind" maxLength={2000} error={err("message")} />
+        <TextField name="email" label={t.forms.email} type="email" autoComplete="email" error={err("email")} />
+        <TextArea name="message" label={c.tellUs} maxLength={2000} error={err("message")} />
       </fieldset>
       <Consent error={err("consent")} businessName={businessName} />
       <FormStatus state={state} onReset={reset} next="" />
-      <SubmitButton state={state} label="Send construction enquiry" />
+      <SubmitButton state={state} label={c.submit} />
     </form>
   );
 }

@@ -2,9 +2,11 @@
 
 import { useRef } from "react";
 import { askProjectQuestion } from "@/app/account/_actions/customer";
+import { useI18n } from "@/i18n/client";
 import { Area, Status, Submit, useFormAction } from "@/components/admin/kit";
 
 export function QuestionForm({ projectId }: { projectId: string }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLFormElement>(null);
   const { state, onSubmit, pending } = useFormAction(async (prev, fd) => {
     const r = await askProjectQuestion(projectId, prev, fd);
@@ -14,8 +16,8 @@ export function QuestionForm({ projectId }: { projectId: string }) {
   return (
     <form ref={ref} onSubmit={onSubmit} className="space-y-3">
       <Status state={state} />
-      <Area label="Ask a question" name="body" rows={3} state={state} />
-      <Submit pending={pending}>Send question</Submit>
+      <Area label={t.account.build.ask} name="body" rows={3} state={state} />
+      <Submit pending={pending}>{t.account.build.send}</Submit>
     </form>
   );
 }

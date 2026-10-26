@@ -330,6 +330,8 @@ model Property {
   @@index([type])
   @@index([publicPrice])
   @@index([locationId])
+  /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
+  translations Json @default("{}")
 }
 
 model PropertyImage {
@@ -381,6 +383,8 @@ model Project {
   siteVisits     SiteVisit[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
+  translations Json @default("{}")
 }
 
 model ProjectImage {
@@ -532,6 +536,8 @@ model SiteSettings {
   aboutImageUrl        String?
   aboutImageAlt        String?
   updatedAt            DateTime @updatedAt
+  /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
+  translations Json @default("{}")
 }
 
 // ─────────────────────────────── Property Twin

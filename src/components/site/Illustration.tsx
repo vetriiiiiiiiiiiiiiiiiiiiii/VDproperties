@@ -1,3 +1,7 @@
+"use client";
+
+import { useI18n } from "@/i18n/client";
+
 /**
  * Architectural line drawings used in place of photographs until the company supplies its own.
  * Each one is visibly labelled as a sample illustration so it can't be mistaken for a real project photo.
@@ -35,6 +39,7 @@ export function Illustration({
   className?: string;
   title?: string;
 }) {
+  const { t: dict } = useI18n();
   const t = TONES[tone ?? DEFAULT_TONE[variant]];
   const Drawing = DRAWINGS[variant] ?? DRAWINGS.elevation;
   return (
@@ -43,7 +48,7 @@ export function Illustration({
       preserveAspectRatio="xMidYMid meet"
       className={`block h-full w-full ${className}`}
       role="img"
-      aria-label={title ?? "Sample architectural illustration"}
+      aria-label={title ?? dict.illustration.alt}
       style={{ background: t.bg }}
     >
       <defs>
@@ -57,7 +62,7 @@ export function Illustration({
       {label && (
         <g fontFamily="ui-monospace, Menlo, monospace" fontSize="13" letterSpacing="2" fill={t.line} opacity="0.75">
           <rect x="24" y="552" width="330" height="26" fill={t.bg} opacity="0.9" />
-          <text x="34" y="570">SAMPLE ILLUSTRATION · NOT A PHOTO</text>
+          <text x="34" y="570">{dict.illustration.sample}</text>
         </g>
       )}
     </svg>

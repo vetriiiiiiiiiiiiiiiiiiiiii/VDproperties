@@ -11,18 +11,20 @@ import { criteriaSchema } from "@/lib/plotfit";
 import { estimateBudget, LINE_KEYS } from "@/lib/studio/estimate";
 import { clampInputs, generateLayout, HOUSE_STYLES, type PlotGeometry } from "@/lib/studio/layout";
 import { findCostCard } from "@/lib/platform";
-import { runAction, type ActionResult } from "@/lib/admin";
+import { type ActionResult } from "@/lib/admin";
+import { actionMessages, runLocalised } from "@/i18n/server";
 
 export async function toggleSavedProperty(propertyId: string): Promise<ActionResult> {
-  return runAction(async () => {
+  const m = await actionMessages();
+  return runLocalised(async () => {
     const me = await requireCustomer();
     const property = await db.property.findFirst({ where: { id: propertyId, publication: "PUBLISHED" }, select: { id: true } });
-    if (!property) return { ok: false, message: "This property is no longer listed." };
+    if (!property) return { ok: false, message: m.propertyGone };
     const existing = await db.savedProperty.findUnique({ where: { userId_propertyId: { userId: me.id, propertyId } } });
     if (existing) await db.savedProperty.delete({ where: { id: existing.id } });
     else await db.savedProperty.create({ data: { userId: me.id, propertyId } });
     revalidatePath("/", "layout");
-    return { ok: true, message: existing ? "Removed from your shortlist." : "Saved to your shortlist." };
+    return { ok: true, message: existing ? m.removed : m.saved };
   });
 }
 
@@ -55,7 +57,8 @@ export type ScenarioPayload = z.infer<typeof scenarioSchema>;
  * property data, so saved results never depend on what the browser sent.
  */
 export async function saveScenario(payload: ScenarioPayload, scenarioId?: string): Promise<ActionResult> {
-  return runAction(async () => {
+  const m = await actionMessages();
+  return runLocalised(async () => {
     const me = await requireCustomer();
     const input = scenarioSchema.parse(payload);
     const inputs = clampInputs(input.inputs);
@@ -67,9 +70,9 @@ export async function saveScenario(payload: ScenarioPayload, scenarioId?: string
     let propertyUpdatedAt: Date | null = null;
     if (input.propertyId) {
       const p = await db.property.findFirst({ where: { id: input.propertyId, publication: "PUBLISHED" } });
-      if (!p) return { ok: false, message: "This property is no longer listed." };
+      if (!p) return { ok: false, message: m.propertyGone };
       const fromRecord = plotFromProperty(p);
-      if (!fromRecord) return { ok: false, message: "This property's dimensions aren't on record yet, so it can't be planned." };
+      if (!fromRecord) return { ok: false, message: m.noDims };
       plot = { ...fromRecord, ...(input.setbacks && fromRecord.setbackSource !== "RECORD" ? { setbacks: input.setbacks, setbackSource: "USER" as const } : {}) };
       if (!fromRecord.maxCoveragePct && input.maxCoveragePct) plot = { ...plot, maxCoveragePct: input.maxCoveragePct, coverageSource: "USER" };
       quotedPrice = p.publicPrice === null ? null : Number(p.publicPrice);
@@ -77,7 +80,7 @@ export async function saveScenario(payload: ScenarioPayload, scenarioId?: string
       propertyUpdatedAt = p.updatedAt;
       snapshot = { referenceCode: p.referenceCode, title: p.title, widthFt: p.plotWidthFt, depthFt: p.plotDepthFt, price: quotedPrice, availability: p.availability, landAreaSqft: p.landAreaSqft };
     } else {
-      if (!input.illustrativePlot) return { ok: false, message: "Describe the plot first." };
+      if (!input.illustrativePlot) return { ok: false, message: m.describe };
       const { widthFt, depthFt, price } = input.illustrativePlot;
       plot = {
         widthFt,
@@ -128,38 +131,41 @@ export async function saveScenario(payload: ScenarioPayload, scenarioId?: string
     let saved;
     if (scenarioId) {
       const owned = await db.planningScenario.findFirst({ where: { id: scenarioId, userId: me.id } });
-      if (!owned) return { ok: false, message: "Scenario not found." };
+      if (!owned) return { ok: false, message: m.notFound };
       saved = await db.planningScenario.update({ where: { id: scenarioId }, data });
     } else {
-      if ((await db.planningScenario.count({ where: { userId: me.id } })) >= 50) return { ok: false, message: "You can keep up to 50 scenarios. Delete one to save another." };
+      if ((await db.planningScenario.count({ where: { userId: me.id } })) >= 50) return { ok: false, message: m.limit };
       saved = await db.planningScenario.create({ data: { ...data, userId: me.id } });
     }
     revalidatePath("/account", "layout");
-    return { ok: true, message: "Scenario saved to your account.", redirectTo: saved.id };
+    return { ok: true, message: m.scenarioSaved, redirectTo: saved.id };
   });
 }
 
 export async function deleteScenario(id: string) {
+  const m = await actionMessages();
   const me = await requireCustomer();
   await db.planningScenario.deleteMany({ where: { id, userId: me.id } });
   revalidatePath("/account", "layout");
 }
 
 export async function saveSearch(name: string, criteria: unknown, alerts: boolean): Promise<ActionResult> {
-  return runAction(async () => {
+  const m = await actionMessages();
+  return runLocalised(async () => {
     const me = await requireCustomer();
     const parsed = criteriaSchema.parse(criteria);
     const cleanName = z.string().trim().min(2, "Name your search").max(60).parse(name);
     const user = await db.user.findUniqueOrThrow({ where: { id: me.id }, select: { marketingConsent: true } });
-    if (alerts && !user.marketingConsent) return { ok: false, message: "To receive alerts, first allow listing emails in your account settings." };
-    if ((await db.savedSearch.count({ where: { userId: me.id } })) >= 20) return { ok: false, message: "You can keep up to 20 saved searches." };
+    if (alerts && !user.marketingConsent) return { ok: false, message: m.alertsConsent };
+    if ((await db.savedSearch.count({ where: { userId: me.id } })) >= 20) return { ok: false, message: m.searchLimit };
     await db.savedSearch.create({ data: { userId: me.id, name: cleanName, criteria: parsed as Prisma.InputJsonValue, alertsEnabled: alerts } });
     revalidatePath("/account", "layout");
-    return { ok: true, message: alerts ? "Search saved — we'll email you when a matching property is listed." : "Search saved to your account." };
+    return { ok: true, message: alerts ? m.searchSavedAlerts : m.searchSaved };
   });
 }
 
 export async function toggleSearchAlerts(id: string) {
+  const m = await actionMessages();
   const me = await requireCustomer();
   const s = await db.savedSearch.findFirst({ where: { id, userId: me.id }, include: { user: { select: { marketingConsent: true } } } });
   if (!s) return;
@@ -169,20 +175,22 @@ export async function toggleSearchAlerts(id: string) {
 }
 
 export async function deleteSearch(id: string) {
+  const m = await actionMessages();
   const me = await requireCustomer();
   await db.savedSearch.deleteMany({ where: { id, userId: me.id } });
   revalidatePath("/account", "layout");
 }
 
 export async function askProjectQuestion(projectId: string, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
-  return runAction(async () => {
+  const m = await actionMessages();
+  return runLocalised(async () => {
     const me = await requireCustomer();
     const project = await db.buildProject.findFirst({ where: { id: projectId, customerId: me.id }, select: { id: true, code: true } });
-    if (!project) return { ok: false, message: "Project not found." };
+    if (!project) return { ok: false, message: m.projectNotFound };
     const body = z.string().trim().min(3, "Write your question").max(2000).parse(fd.get("body"));
     await db.buildQuestion.create({ data: { projectId, authorId: me.id, body } });
     await audit({ actorId: me.id, action: "build.question_asked", entityType: "BuildProject", entityId: projectId, summary: `Customer question on ${project.code}` });
     revalidatePath("/account", "layout");
-    return { ok: true, message: "Question sent to your project team." };
+    return { ok: true, message: m.questionSent };
   });
 }

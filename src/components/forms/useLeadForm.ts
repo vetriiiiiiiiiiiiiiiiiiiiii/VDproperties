@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useI18n } from "@/i18n/client";
 
 export type FormState =
   | { status: "idle" }
@@ -10,6 +11,7 @@ export type FormState =
 
 /** Posts a form as JSON. Only reports success when the server confirms the record was stored. */
 export function useLeadForm(endpoint: string) {
+  const { locale, t } = useI18n();
   const [state, setState] = useState<FormState>({ status: "idle" });
   const startedAt = useRef<number>(Date.now());
   const inFlight = useRef(false);
@@ -21,9 +23,9 @@ export function useLeadForm(endpoint: string) {
     const data: Record<string, unknown> = Object.fromEntries(new FormData(form).entries());
     // Unchecked checkboxes are absent from FormData; send them explicitly.
     form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => (data[cb.name] = cb.checked));
-    Object.assign(data, extra, { startedAt: startedAt.current, sourcePath: window.location.pathname });
+    Object.assign(data, extra, { startedAt: startedAt.current, sourcePath: window.location.pathname, locale });
     try {
-      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", "x-vdp-locale": locale }, body: JSON.stringify(data) });
       const body = await res.json().catch(() => null);
       if (res.ok && body?.ok) {
         setState({ status: "success", message: body.message, reference: body.reference });
@@ -31,14 +33,14 @@ export function useLeadForm(endpoint: string) {
       } else {
         setState({
           status: "error",
-          message: body?.message ?? "We couldn't send your request. Please try again in a moment.",
+          message: body?.message ?? t.forms.genericError,
           errors: body?.errors ?? {},
         });
         const firstInvalid = body?.errors && Object.keys(body.errors)[0];
         if (firstInvalid) form.querySelector<HTMLElement>(`[name="${firstInvalid}"]`)?.focus();
       }
     } catch {
-      setState({ status: "error", message: "We couldn't reach the server. Check your connection and try again — your request has not been sent.", errors: {} });
+      setState({ status: "error", message: t.forms.networkError, errors: {} });
     } finally {
       inFlight.current = false;
     }

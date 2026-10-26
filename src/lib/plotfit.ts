@@ -7,13 +7,8 @@
 import { z } from "zod";
 import { assumedSetbacks, generateLayout } from "./studio/layout";
 
-export const FACILITY_KINDS = {
-  school: "Schools",
-  hospital: "Hospital / clinic",
-  transport: "Public transport",
-  market: "Shops & market",
-  highway: "Main road / highway",
-} as const;
+/** Facility kinds used by PlotFit and the Twin; display names live in the dictionaries. */
+export const FACILITY_KINDS = { school: true, hospital: true, transport: true, market: true, highway: true } as const;
 export type FacilityKind = keyof typeof FACILITY_KINDS;
 
 const csv = z.preprocess((v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v), z.array(z.string().max(80)).max(20));
@@ -97,50 +92,71 @@ export type MatchProperty = {
 };
 
 export type Scores = Record<keyof Weights, number>;
+/** A reason, compromise or unknown, rendered in the visitor's language by the interface. */
+export type Msg = { code: MsgCode; params?: Record<string, string | number> };
+export type MsgCode =
+  | "budgetComfortable"
+  | "budgetWithin"
+  | "priceUnknown"
+  | "inLocation"
+  | "otherLocation"
+  | "builtOk"
+  | "builtSmall"
+  | "builtUnknown"
+  | "bedroomsOk"
+  | "bedroomsUnknown"
+  | "amenityHit"
+  | "amenityUnknown"
+  | "fits"
+  | "fitsPartial"
+  | "noFit"
+  | "setbacksAssumed"
+  | "dimsUnknown"
+  | "nothingRecorded"
+  | "noUtilities"
+  | "facilityNear"
+  | "facilityProposed"
+  | "facilityNone"
+  | "reserved"
+  // exclusions
+  | "unavailable"
+  | "notLand"
+  | "notHouse"
+  | "outsideLocations"
+  | "overBudget"
+  | "fewerBedrooms";
+
 export type Match = {
   property: MatchProperty;
   score: number;
   scores: Scores;
-  reasons: string[];
-  compromises: string[];
-  unknowns: string[];
+  reasons: Msg[];
+  compromises: Msg[];
+  unknowns: Msg[];
 };
 export type MatchResult = {
   matches: Match[];
   needsInfo: Match[];
-  excluded: { property: MatchProperty; reason: string }[];
+  excluded: { property: MatchProperty; reason: Msg }[];
 };
-
-const fmt = (n: number) => (n >= 1e7 ? `₹${(n / 1e7).toFixed(2).replace(/\.?0+$/, "")} crore` : n >= 1e5 ? `₹${(n / 1e5).toFixed(1).replace(/\.0$/, "")} lakh` : `₹${Math.round(n).toLocaleString("en-IN")}`);
 
 export function matchProperties(props: MatchProperty[], c: Criteria, weights: Weights = DEFAULT_WEIGHTS): MatchResult {
   const result: MatchResult = { matches: [], needsInfo: [], excluded: [] };
   const available = c.budget !== undefined ? c.budget * (1 - (c.reservePct ?? 0) / 100) : undefined;
+  const exclude = (p: MatchProperty, code: MsgCode, params?: Msg["params"]) => result.excluded.push({ property: p, reason: { code, params } });
 
   for (const p of props) {
     // ── Hard constraints
-    if (!c.includeUnavailable && (p.availability === "SOLD" || p.availability === "UNAVAILABLE")) {
-      result.excluded.push({ property: p, reason: "No longer available" });
-      continue;
-    }
-    if (c.type === "land" && p.kind !== "land") { result.excluded.push({ property: p, reason: "Not land" }); continue; }
-    if (c.type === "home" && p.kind !== "home") { result.excluded.push({ property: p, reason: "Not a house" }); continue; }
-    if (c.strictLocation && c.locations.length && (!p.locationSlug || !c.locations.includes(p.locationSlug))) {
-      result.excluded.push({ property: p, reason: "Outside your chosen locations" });
-      continue;
-    }
-    if (available !== undefined && p.price !== null && p.price > available) {
-      result.excluded.push({ property: p, reason: `Price ${fmt(p.price)} is above the ${fmt(available)} you set aside for the property` });
-      continue;
-    }
-    if (p.kind === "home" && c.bedrooms && p.bedrooms !== null && p.bedrooms < c.bedrooms) {
-      result.excluded.push({ property: p, reason: `${p.bedrooms} bedrooms — fewer than the ${c.bedrooms} you need` });
-      continue;
-    }
+    if (!c.includeUnavailable && (p.availability === "SOLD" || p.availability === "UNAVAILABLE")) { exclude(p, "unavailable"); continue; }
+    if (c.type === "land" && p.kind !== "land") { exclude(p, "notLand"); continue; }
+    if (c.type === "home" && p.kind !== "home") { exclude(p, "notHouse"); continue; }
+    if (c.strictLocation && c.locations.length && (!p.locationSlug || !c.locations.includes(p.locationSlug))) { exclude(p, "outsideLocations"); continue; }
+    if (available !== undefined && p.price !== null && p.price > available) { exclude(p, "overBudget", { price: p.price, available }); continue; }
+    if (p.kind === "home" && c.bedrooms && p.bedrooms !== null && p.bedrooms < c.bedrooms) { exclude(p, "fewerBedrooms", { n: p.bedrooms, want: c.bedrooms }); continue; }
 
-    const reasons: string[] = [];
-    const compromises: string[] = [];
-    const unknowns: string[] = [];
+    const reasons: Msg[] = [];
+    const compromises: Msg[] = [];
+    const unknowns: Msg[] = [];
     const s: Scores = { budget: 0.5, location: 0.6, size: 0.5, house: 0.5, infrastructure: 0.3, completeness: p.completeness };
 
     // Budget
@@ -148,21 +164,21 @@ export function matchProperties(props: MatchProperty[], c: Criteria, weights: We
       s.budget = 0.6;
     } else if (p.price === null) {
       s.budget = 0.3;
-      unknowns.push("The price isn't published, so budget fit can't be confirmed — ask for the current price.");
+      unknowns.push({ code: "priceUnknown" });
     } else {
       const ratio = p.price / available;
       s.budget = 1 - 0.5 * ratio * ratio;
-      reasons.push(ratio <= 0.8 ? `Comfortably within budget — leaves about ${fmt(available - p.price)} of the amount set aside.` : `Within the ${fmt(available)} you set aside for the property.`);
+      reasons.push(ratio <= 0.8 ? { code: "budgetComfortable", params: { left: available - p.price } } : { code: "budgetWithin", params: { available } });
     }
 
     // Location
     if (c.locations.length) {
       if (p.locationSlug && c.locations.includes(p.locationSlug)) {
         s.location = 1;
-        reasons.push(`In ${p.locationName}, one of your preferred locations.`);
+        reasons.push({ code: "inLocation", params: { name: p.locationName ?? "" } });
       } else {
         s.location = 0.15;
-        compromises.push(`In ${p.locationName ?? "a location"} you didn't select.`);
+        compromises.push({ code: "otherLocation", params: { name: p.locationName ?? "" } });
       }
     }
 
@@ -172,18 +188,17 @@ export function matchProperties(props: MatchProperty[], c: Criteria, weights: We
         if (p.builtUpAreaSqft) {
           const ratio = p.builtUpAreaSqft / c.builtUp;
           s.size = Math.min(1, ratio) * (ratio > 1.6 ? 0.85 : 1);
-          if (ratio >= 0.9) reasons.push(`${Math.round(p.builtUpAreaSqft).toLocaleString("en-IN")} sq ft built-up — meets the size you want.`);
-          else compromises.push(`${Math.round(p.builtUpAreaSqft).toLocaleString("en-IN")} sq ft built-up is smaller than the ${c.builtUp.toLocaleString("en-IN")} sq ft you prefer.`);
-        } else unknowns.push("Built-up area isn't recorded.");
+          if (ratio >= 0.9) reasons.push({ code: "builtOk", params: { area: Math.round(p.builtUpAreaSqft) } });
+          else compromises.push({ code: "builtSmall", params: { area: Math.round(p.builtUpAreaSqft), want: c.builtUp } });
+        } else unknowns.push({ code: "builtUnknown" });
       } else s.size = 0.6;
       let house = 0.6;
-      if (c.bedrooms && p.bedrooms !== null) { house = 1; reasons.push(`${p.bedrooms} bedrooms meets your need for ${c.bedrooms}.`); }
-      else if (c.bedrooms) { house = 0.3; unknowns.push("Bedroom count isn't recorded."); }
-      for (const [want, label] of [[c.parking, "parking"], [c.garden, "a garden"], [c.office, "a home office"]] as const) {
+      if (c.bedrooms && p.bedrooms !== null) { house = 1; reasons.push({ code: "bedroomsOk", params: { n: p.bedrooms, want: c.bedrooms } }); }
+      else if (c.bedrooms) { house = 0.3; unknowns.push({ code: "bedroomsUnknown" }); }
+      for (const [want, what, match] of [[c.parking, "parking", "parking"], [c.garden, "garden", "garden"], [c.office, "office", "study"]] as const) {
         if (!want) continue;
-        const hit = p.amenityNames.some((a) => a.toLowerCase().includes(label === "a home office" ? "study" : label.replace("a ", "")));
-        if (hit) reasons.push(`Listing records ${label}.`);
-        else { house -= 0.12; unknowns.push(`The listing doesn't record ${label}.`); }
+        if (p.amenityNames.some((a) => a.toLowerCase().includes(match))) reasons.push({ code: "amenityHit", params: { what } });
+        else { house -= 0.12; unknowns.push({ code: "amenityUnknown", params: { what } }); }
       }
       s.house = Math.max(0, Math.min(1, house));
     } else {
@@ -210,21 +225,21 @@ export function matchProperties(props: MatchProperty[], c: Criteria, weights: We
         const fit = layout.achievedBuiltUpSqft / target;
         s.size = Math.min(1, fit);
         s.house = layout.feasible ? Math.min(1, fit) : 0.2;
-        if (layout.feasible && fit >= 0.98) reasons.push(`A two-storey concept of about ${target.toLocaleString("en-IN")} sq ft fits on the ${p.plotWidthFt} × ${p.plotDepthFt} ft plot${fromRecord ? "" : " (using assumed setbacks)"}.`);
-        else if (layout.feasible) compromises.push(`About ${layout.achievedBuiltUpSqft.toLocaleString("en-IN")} sq ft fits across two floors — less than the ${target.toLocaleString("en-IN")} sq ft you want.`);
-        else compromises.push("The intended house doesn't fit within this plot's recorded limits.");
-        if (!fromRecord) unknowns.push("Setbacks for this plot aren't on record, so the fit uses general assumptions.");
+        if (layout.feasible && fit >= 0.98) reasons.push({ code: "fits", params: { target, w: p.plotWidthFt, d: p.plotDepthFt, assumed: fromRecord ? 0 : 1 } });
+        else if (layout.feasible) compromises.push({ code: "fitsPartial", params: { achieved: layout.achievedBuiltUpSqft, target } });
+        else compromises.push({ code: "noFit" });
+        if (!fromRecord) unknowns.push({ code: "setbacksAssumed" });
       } else if (p.landAreaSqft) {
         const roughNeed = target / 2 / 0.6;
         s.size = Math.min(1, p.landAreaSqft / roughNeed);
         s.house = 0.4;
-        unknowns.push("Plot dimensions aren't recorded, so the available records don't yet establish whether your house layout will fit.");
+        unknowns.push({ code: "dimsUnknown" });
       } else {
         s.size = 0.2;
         s.house = 0.2;
-        unknowns.push("Neither plot area nor dimensions are recorded.");
+        unknowns.push({ code: "nothingRecorded" });
       }
-      if (c.timeline === "now" && !p.amenityNames.some((a) => /water|electric|power/i.test(a))) unknowns.push("You plan to build soon, but water or power connections aren't recorded for this plot.");
+      if (c.timeline === "now" && !p.amenityNames.some((a) => /water|electric|power/i.test(a))) unknowns.push({ code: "noUtilities" });
     }
 
     // Infrastructure & nearby facilities
@@ -233,18 +248,17 @@ export function matchProperties(props: MatchProperty[], c: Criteria, weights: We
       const maxKm = c.maxKm ?? 5;
       let hits = 0;
       for (const kind of c.facilities) {
-        const label = FACILITY_KINDS[kind as FacilityKind] ?? kind;
         const near = p.facilities.filter((f) => f.kind === kind && f.distanceKm !== null && f.distanceKm <= maxKm);
         const existing = near.find((f) => f.status === "EXISTING");
-        if (existing) { hits += 1; reasons.push(`${existing.name} is about ${existing.distanceKm} km away.`); }
-        else if (near.find((f) => f.status === "PROPOSED")) { hits += 0.4; compromises.push(`${label} within ${maxKm} km is only proposed, not built.`); }
-        else unknowns.push(`No ${label.toLowerCase()} within ${maxKm} km is on record.`);
+        if (existing) { hits += 1; reasons.push({ code: "facilityNear", params: { name: existing.name, km: existing.distanceKm! } }); }
+        else if (near.find((f) => f.status === "PROPOSED")) { hits += 0.4; compromises.push({ code: "facilityProposed", params: { kind, km: maxKm } }); }
+        else unknowns.push({ code: "facilityNone", params: { kind, km: maxKm } });
       }
       infra = 0.4 * infra + 0.6 * (hits / c.facilities.length);
     }
     s.infrastructure = infra;
     if (p.passportTotal > 0) s.completeness = 0.6 * p.completeness + 0.4 * (p.passportReviewed / p.passportTotal);
-    if (p.availability === "RESERVED") compromises.push("Currently reserved — it may not stay available.");
+    if (p.availability === "RESERVED") compromises.push({ code: "reserved" });
 
     const totalW = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
     const score = Math.round(((Object.keys(weights) as (keyof Weights)[]).reduce((acc, k) => acc + weights[k] * s[k], 0) / totalW) * 100);

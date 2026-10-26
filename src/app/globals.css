@@ -22,8 +22,9 @@
   --color-line: #e3dccb;
   --color-black: #000000;
 
-  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
-  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  /* Tamil glyphs fall through to Tamil faces, which only download when Tamil text is on the page. */
+  --font-serif: var(--font-newsreader), var(--font-tamil-serif), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-manrope), var(--font-tamil-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
 
   --text-display: clamp(2.75rem, 1.6rem + 4.6vw, 5.75rem);
@@ -32,6 +33,10 @@
   --text-headline--line-height: 1.06;
 
   --container-site: 88rem;
+
+  --radius-soft: 0.875rem;
+  --radius-liquid: 1rem;
+  --ease-liquid: cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
 @layer base {
@@ -54,6 +59,29 @@
   }
   p {
     text-wrap: pretty;
+  }
+  /* Tamil words are long and glyphs taller: slightly smaller display sizes, roomier leading. */
+  :lang(ta) {
+    --text-display: clamp(2.1rem, 1.3rem + 3.4vw, 4.3rem);
+    --text-display--line-height: 1.18;
+    --text-headline: clamp(1.7rem, 1.2rem + 1.9vw, 2.9rem);
+    --text-headline--line-height: 1.22;
+    line-height: 1.75;
+  }
+  :lang(ta) h1,
+  :lang(ta) h2,
+  :lang(ta) h3 {
+    letter-spacing: 0;
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+  :lang(ta) .annot,
+  :lang(ta) .annot-plain {
+    letter-spacing: 0.04em;
+    text-transform: none;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
   :focus-visible {
     outline: 2px solid var(--color-gold);
@@ -120,17 +148,44 @@
   }
 
   .btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.6rem;
     min-height: 3rem;
-    padding: 0.75rem 1.4rem;
+    padding: 0.75rem 1.5rem;
     font-weight: 600;
     font-size: 0.9375rem;
     letter-spacing: 0.01em;
     border: 1px solid transparent;
-    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    border-radius: 999px;
+    transition: background-color 0.25s, color 0.25s, border-color 0.25s, transform 0.35s var(--ease-liquid), box-shadow 0.35s;
+  }
+  /* Liquid fill: a morphing drop wells up from the pointer side on hover. */
+  .btn::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: 50%;
+    top: 120%;
+    width: 140%;
+    aspect-ratio: 1;
+    translate: -50% 0;
+    border-radius: 42% 58% 61% 39% / 45% 41% 59% 55%;
+    background: var(--btn-fill, color-mix(in oklab, currentColor 12%, transparent));
+    transition: top 0.55s var(--ease-liquid);
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .btn:hover:not(:disabled)::before {
+      top: -20%;
+      animation: liquid-spin 3.5s linear infinite;
+    }
+    .btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
   }
   .btn:disabled {
     opacity: 0.6;
@@ -139,9 +194,8 @@
   .btn-primary {
     background: var(--color-forest);
     color: var(--color-ivory);
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: var(--color-emerald);
+    --btn-fill: var(--color-emerald);
+    box-shadow: 0 10px 30px -14px color-mix(in oklab, var(--color-forest) 80%, transparent);
   }
   .btn-gold {
     background: linear-gradient(135deg, var(--color-gold-light), var(--color-gold) 55%, var(--color-gold-deep));
@@ -152,6 +206,10 @@
   }
   .btn-gold:hover:not(:disabled) {
     background-position: 100% 100%;
+  }
+  .btn-gold {
+    --btn-fill: color-mix(in oklab, var(--color-sun-light) 55%, transparent);
+    box-shadow: 0 10px 30px -14px color-mix(in oklab, var(--color-gold-deep) 90%, transparent);
   }
   .text-sun {
     background: linear-gradient(180deg, var(--color-terracotta-deep), var(--color-terracotta) 55%, var(--color-sun-light));
@@ -171,8 +229,9 @@
   .btn-outline {
     border-color: currentColor;
   }
-  .btn-outline:hover:not(:disabled) {
-    background: color-mix(in oklab, currentColor 8%, transparent);
+  .btn-outline {
+    background: color-mix(in oklab, var(--color-white) 45%, transparent);
+    backdrop-filter: blur(8px);
   }
   .link-arrow {
     display: inline-flex;
@@ -206,16 +265,16 @@
     padding: 0.6rem 0.8rem;
     font-size: 1rem;
     color: var(--color-ink);
-    border-radius: 0;
-    transition: border-color 0.15s;
+    border-radius: var(--radius-soft);
+    transition: border-color 0.15s, box-shadow 0.2s;
   }
   .field:hover {
     border-color: #b9b2a1;
   }
   .field:focus {
     border-color: var(--color-emerald);
-    outline: 2px solid color-mix(in oklab, var(--color-emerald) 25%, transparent);
-    outline-offset: 0;
+    outline: none;
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-emerald) 18%, transparent);
   }
   .field[aria-invalid="true"] {
     border-color: var(--color-terracotta);
@@ -271,6 +330,26 @@
     right: -10px;
     border-bottom: 1px solid;
     border-right: 1px solid;
+  }
+
+  /* ── Liquid glass ────────────────────────────────────────── */
+  /* Paper and ink: flat surfaces with hairline rules, no blur or glow. */
+  .glass {
+    background: var(--color-ivory);
+    border: 1px solid color-mix(in oklab, var(--color-navy) 14%, transparent);
+  }
+  .glass-dark {
+    background: var(--color-navy-deep);
+    border: 1px solid color-mix(in oklab, var(--color-white) 14%, transparent);
+  }
+  .surface {
+    background: var(--color-white);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-liquid);
+  }
+  .blob-mask {
+    border-radius: calc(var(--radius-liquid) - 0.25rem);
+    overflow: hidden;
   }
 
   .prose-vd {
@@ -410,10 +489,6 @@
     stroke-dasharray: 1;
     animation: draw 2.6s cubic-bezier(0.6, 0, 0.2, 1) 1.4s both;
   }
-  .vd-word {
-    animation: word-cycle 12s cubic-bezier(0.7, 0, 0.2, 1) infinite;
-    animation-delay: calc(var(--i) * 3s);
-  }
   .vd-pop {
     transform-box: fill-box;
     transform-origin: center;
@@ -537,19 +612,241 @@
   }
 }
 /* Four-word rotation: each word owns a 3s slot and hands over with a brief overlap */
-@keyframes word-cycle {
-  0% {
-    transform: translateY(105%);
-    opacity: 0;
-  }
-  2%,
-  23.5% {
-    transform: none;
-    opacity: 1;
-  }
-  26%,
-  100% {
-    transform: translateY(-105%);
-    opacity: 0;
+
+/* ───────────── Liquid motion ───────────── */
+@keyframes liquid-spin {
+  to {
+    rotate: 360deg;
   }
 }
+@keyframes liquid-morph {
+  0%,
+  100% {
+    border-radius: 42% 58% 61% 39% / 45% 41% 59% 55%;
+  }
+  33% {
+    border-radius: 58% 42% 38% 62% / 55% 61% 39% 45%;
+  }
+  66% {
+    border-radius: 36% 64% 54% 46% / 38% 52% 48% 62%;
+  }
+}
+.liquid-morph {
+  border-radius: 42% 58% 61% 39% / 45% 41% 59% 55%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .liquid-morph {
+    animation: liquid-morph 14s ease-in-out infinite;
+  }
+  .liquid-float {
+    animation: liquid-float 9s ease-in-out infinite alternate;
+  }
+}
+@keyframes liquid-float {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(0, -14px, 0) scale(1.03);
+  }
+}
+
+/* Score ring for PlotFit matches — a conic fill that pours in on load. */
+@property --score { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.score-ring { background: conic-gradient(var(--color-emerald) var(--score), var(--color-line) 0); }
+@media (prefers-reduced-motion: no-preference) {
+  .score-ring { animation: score-pour 1.4s var(--ease-liquid) both; }
+}
+@keyframes score-pour { from { --score: 0deg; } }
+
+/* Liquid choice tiles: the selected state pours in as a blob from the pointer side. */
+.liquid-tile {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--radius-liquid);
+  border: 1px solid var(--color-line);
+  background: color-mix(in oklab, var(--color-white) 72%, transparent);
+  transition: color 0.35s, border-color 0.35s, transform 0.5s var(--ease-liquid), border-radius 0.6s var(--ease-liquid);
+}
+.liquid-tile::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background: radial-gradient(circle at 30% 40%, var(--color-emerald), var(--color-forest) 70%);
+  border-radius: 46% 54% 42% 58% / 52% 44% 56% 48%;
+  transform: scale(0) rotate(-20deg);
+  transition: transform 0.7s var(--ease-liquid);
+}
+.liquid-tile:hover { border-color: var(--color-emerald); transform: translateY(-2px); }
+.liquid-tile.is-on { color: var(--color-ivory); border-color: var(--color-forest); border-radius: 1.25rem 2rem 1.5rem 2.25rem; }
+.liquid-tile.is-on::before { transform: scale(1) rotate(0); }
+
+/* Progress as a liquid column with a moving meniscus. */
+.liquid-track { height: 0.5rem; border-radius: 99px; background: var(--color-line); overflow: hidden; }
+.liquid-track-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--color-terracotta), var(--color-sun-light), var(--color-gold), var(--color-terracotta));
+  background-size: 300% 100%;
+  transition: width 0.8s var(--ease-liquid);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .liquid-track-fill { animation: liquid-flow 4s linear infinite; }
+}
+@keyframes liquid-flow { to { background-position: 300% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .liquid-tile, .liquid-tile::before, .liquid-track-fill { transition: none; }
+}
+
+/* Segmented control with a liquid indicator that stretches as it slides. */
+.liquid-seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--color-paper);
+  box-shadow: inset 0 1px 3px color-mix(in oklab, var(--color-navy) 14%, transparent);
+  isolation: isolate;
+}
+.liquid-seg::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 4px;
+  bottom: 4px;
+  left: calc(4px + (100% - 8px) / var(--n) * var(--at));
+  width: calc((100% - 8px) / var(--n));
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, var(--color-emerald), var(--color-forest));
+  box-shadow: 0 6px 16px -8px var(--color-forest);
+  transition: left 0.55s var(--ease-liquid);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .liquid-seg::before { animation: none; }
+  .liquid-seg:has(:focus-visible)::before, .liquid-seg:active::before { transform: scaleX(1.12) scaleY(0.9); transition: left 0.55s var(--ease-liquid), transform 0.3s; }
+}
+.liquid-seg-item {
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: color 0.3s;
+}
+.liquid-seg-item[aria-selected="true"], .liquid-seg-item[data-on="true"] { color: var(--color-ivory); }
+
+/* Studio drawings reflow smoothly as choices change. */
+.studio-morph { transition: x 0.6s var(--ease-liquid), y 0.6s var(--ease-liquid), width 0.6s var(--ease-liquid), height 0.6s var(--ease-liquid), fill 0.4s; }
+@media (prefers-reduced-motion: reduce) { .studio-morph { transition: none; } }
+
+/* Journey: one drop travels the route and merges into each station. */
+.journey-route { filter: url(#vd-goo); }
+.journey-drop { left: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .journey-drop { animation: journey-travel 9s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+}
+@keyframes journey-travel {
+  0%, 8% { left: 0%; transform: translate(-50%, -50%) scale(1); }
+  25%, 33% { left: 33.333%; transform: translate(-50%, -50%) scale(1); }
+  17% { transform: translate(-50%, -50%) scaleX(1.6) scaleY(0.75); }
+  50%, 58% { left: 66.666%; transform: translate(-50%, -50%) scale(1); }
+  42% { transform: translate(-50%, -50%) scaleX(1.6) scaleY(0.75); }
+  75%, 92% { left: 100%; transform: translate(-50%, -50%) scale(1); }
+  67% { transform: translate(-50%, -50%) scaleX(1.6) scaleY(0.75); }
+  100% { left: 100%; transform: translate(-50%, -50%) scale(0); }
+}
+
+/* Hero search capsule cells: quiet labels over borderless selects. */
+.search-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 999px;
+  transition: background-color 0.3s;
+}
+.search-cell:hover, .search-cell:focus-within { background: color-mix(in oklab, var(--color-white) 70%, transparent); }
+.search-cell select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0.1rem 1.25rem 0.1rem 0;
+  font-weight: 600;
+  color: var(--color-ink);
+  outline: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 7px) 55%, calc(100% - 2px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+.search-cell select:disabled { opacity: 0.5; }
+
+/* Pill links with a liquid fill that rises from below on hover. */
+.chip-liquid {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-navy) 20%, transparent);
+  background: var(--color-white);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-navy);
+  transition: color 0.4s, border-color 0.4s;
+}
+.chip-liquid::before {
+  content: "";
+  position: absolute;
+  inset: auto -20% -160% -20%;
+  height: 200%;
+  z-index: -1;
+  border-radius: 45% 55% 0 0 / 30% 30% 0 0;
+  background: var(--color-forest);
+  transition: transform 0.6s var(--ease-liquid);
+}
+.chip-liquid:hover, .chip-liquid:focus-visible { color: var(--color-ivory); border-color: var(--color-forest); }
+.chip-liquid:hover::before, .chip-liquid:focus-visible::before { transform: translateY(-62%); }
+@media (prefers-reduced-motion: reduce) { .chip-liquid::before { transition: none; } }
+
+/* Hero search strip: white, hairline-ruled, softly lifted. */
+.print-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  box-shadow: 0 24px 50px -36px color-mix(in oklab, var(--color-navy) 60%, transparent);
+}
+.print-card .search-cell { border-radius: 0.6rem; }
+@media (min-width: 1024px) {
+  .print-card .search-cell + .search-cell { border-left: 1px solid var(--color-line); border-radius: 0; }
+}
+
+/* Tamil runs longer; the hero headline steps down a size. */
+:lang(ta) #hero-h { font-size: clamp(1.9rem, 1.2rem + 2.2vw, 3.3rem); line-height: 1.22; }
+
+/* Hero showcase: a slow push-in on the current photo, a fading caption, and quiet round controls. */
+.showcase-btn {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-white) 92%, transparent);
+  color: var(--color-navy);
+  font-size: 0.8rem;
+  transition: background-color 0.2s;
+}
+.showcase-btn:hover { background: var(--color-white); }
+.showcase-btn:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .showcase-push { animation: showcase-push 9s ease-out both; }
+  .showcase-caption { animation: showcase-caption 0.7s cubic-bezier(.2,.8,.2,1) both; }
+  .showcase-timer { animation-name: showcase-timer; animation-timing-function: linear; animation-fill-mode: both; }
+}
+@keyframes showcase-push { from { transform: scale(1.08); } to { transform: scale(1); } }
+@keyframes showcase-caption { from { opacity: 0; transform: translateY(10px); } }
+@keyframes showcase-timer { from { width: 0; } to { width: 100%; } }
