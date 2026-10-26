@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formObject, optId, runAction, type ActionResult } from "@/lib/admin";
+import { assertInScope, isAssignable as checkAssignee } from "@/lib/zones";
 
 // datetime-local inputs carry no zone; staff enter India Standard Time.
 const dateOrNull = z.preprocess(
@@ -22,8 +23,9 @@ const enquiryUpdate = z.object({
 export async function updateEnquiry(id: string, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const user = await requirePermission("leads:manage");
+    await assertInScope(user, "enquiry", id);
     const input = enquiryUpdate.parse(formObject(fd));
-    if (input.assignedToId && !(await db.user.findFirst({ where: { id: input.assignedToId, active: true } }))) {
+    if (!(await checkAssignee(input.assignedToId))) {
       return { ok: false, message: "That team member isn't available.", errors: { assignedToId: "Choose an active team member" } };
     }
     const before = await db.enquiry.findUniqueOrThrow({ where: { id }, select: { status: true, assignedToId: true } });
@@ -50,7 +52,11 @@ const visitUpdate = z.object({
 export async function updateSiteVisit(id: string, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const user = await requirePermission("leads:manage");
+    await assertInScope(user, "siteVisit", id);
     const input = visitUpdate.parse(formObject(fd));
+    if (!(await checkAssignee(input.assignedToId))) {
+      return { ok: false, message: "That team member isn't available.", errors: { assignedToId: "Choose an active team member" } };
+    }
     if (input.status === "SCHEDULED" && !input.scheduledFor) {
       return { ok: false, message: "Enter the confirmed date and time before marking the visit as scheduled.", errors: { scheduledFor: "Required for scheduled visits" } };
     }
@@ -62,16 +68,19 @@ export async function updateSiteVisit(id: string, _prev: ActionResult | null, fd
   });
 }
 
-export async function addNote(target: { enquiryId?: string; siteVisitId?: string }, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+export async function addNote(target: { enquiryId?: string; siteVisitId?: string; purchaseId?: string }, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const user = await requirePermission("leads:manage");
+    if (target.enquiryId) await assertInScope(user, "enquiry", target.enquiryId);
+    if (target.siteVisitId) await assertInScope(user, "siteVisit", target.siteVisitId);
+    if (target.purchaseId) await assertInScope(user, "purchase", target.purchaseId);
     const body = z.string().trim().min(1, "Write a note").max(4000).parse(fd.get("body"));
-    await db.leadNote.create({ data: { body, authorId: user.id, enquiryId: target.enquiryId ?? null, siteVisitId: target.siteVisitId ?? null } });
+    await db.leadNote.create({ data: { body, authorId: user.id, enquiryId: target.enquiryId ?? null, siteVisitId: target.siteVisitId ?? null, purchaseId: target.purchaseId ?? null } });
     await audit({
       actorId: user.id,
       action: "lead.note_added",
-      entityType: target.enquiryId ? "Enquiry" : "SiteVisit",
-      entityId: target.enquiryId ?? target.siteVisitId,
+      entityType: target.enquiryId ? "Enquiry" : target.siteVisitId ? "SiteVisit" : "PurchaseRequest",
+      entityId: target.enquiryId ?? target.siteVisitId ?? target.purchaseId,
       summary: "Internal note added",
     });
     revalidatePath("/admin", "layout");

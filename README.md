@@ -179,13 +179,22 @@ Data model highlights:
 
 | Role | Can do |
 | --- | --- |
-| **Super Admin** | Everything, including team management, company settings, the audit log, creating BuildTrace projects, approving changes and recording payments |
-| **Property Manager** | Properties, projects, images, documents, locations & amenities |
-| **Enquiry Manager** | Enquiries, site visits, notes, assignments, CSV export, customer list |
-| **Project Manager** | BuildTrace projects assigned to them: milestones, progress, documents, change proposals, questions, handover |
-| **Customer** | Public account only: their own shortlist, scenarios, searches, enquiries and projects |
+| **Super Admin** | Everything: team and roles (including other Super Admins and Admins), company settings, PlotFit weights, audit log |
+| **Admin** | Runs the business: publishes, unpublishes, features and deletes listings; marks them reserved or sold; approves or declines owner submissions; manages projects, locations, zones, developers and rate cards; creates BuildTrace projects and approves changes; exports leads; adds and edits **Staff** and **Zonal Officers**; views the audit log |
+| **Staff** | Day-to-day work: prepares and edits listing drafts (can't publish), photos, documents and Property Passport; handles enquiries, site visits, purchase requests and appointments; reviews owner submissions; works on BuildTrace projects assigned to them |
+| **Zonal Officer** | Only for locations in their zones: reviews and inspects owner submissions, and handles enquiries, site visits, purchase requests and appointments. Can't edit or publish listings, see customers, or export |
+| **Customer** | Public account: lists their own property for sale, sends purchase requests, and keeps their shortlist, scenarios, searches, enquiries and projects |
 
-The first Super Admin is created by the seed. Add others in **Admin → Team & roles**. There must always be at least one active Super Admin; role changes, deactivation and password resets sign the affected person out everywhere.
+The first Super Admin is created by the seed. Add others in **Admin → Team & roles**: Super Admins can give any staff role; Admins can only add or change Staff and Zonal Officers. There must always be at least one active Super Admin; role changes, deactivation and password resets sign the affected person out everywhere. Upgrading from the earlier roles, the `roles_zones_owner_listings_purchases` migration turns Property, Enquiry and Project Managers into Staff.
+
+**Zones** (Admin → Zones) group locations. A zonal officer covers one or more zones (set on their team entry) and sees only records whose property or project is in those locations; anything outside them, or with no catalogue location, stays with the office team. Every admin list, detail page, count and action checks this on the server.
+
+## Selling and buying
+
+- **Sell your property** (`/sell`, then `/account/listings`): a signed-in customer submits a plot, land, house or villa with its location, size, private address, expected price and their relationship to it, then adds up to 12 photos (re-encoded, location metadata stripped) and 5 private PDFs. Nothing is public until approved. They follow the status and the team's messages in their account, can edit and resubmit while it's *Submitted* or *Changes requested*, and can withdraw it.
+- **Review** (Admin → Owner submissions): reviewers start the review, ask the seller for changes (the message appears in their account), record an inspection with internal notes, and add internal notes. An Admin chooses the catalogue location (which decides the zone) and approves it into Properties as a draft, or declines with a reason. The listing is then finished and published like any other, labelled *Listed by owner* with a note that enquiries go to V D Properties. The seller's name, phone and address are never shown publicly, and their asking price stays private unless staff choose to show a price.
+- **Buy this property** (a tab on every listing's contact panel): a signed-in buyer sends an optional offer, how they'll pay, a timeline, and a preferred appointment (site visit, office meeting or video call, with date and time slot). Staff work it through *New → Contacted → Appointment confirmed → Negotiating → Booked → Sale completed* (or *Closed*), confirm the appointment time and details (shown in the buyer's account), assign it and add notes. An Admin can reserve the property on booking or mark it sold on completion from the same screen. No payment is taken online.
+- **Appointments** (Admin → Appointments): one day-by-day list of upcoming site visits and buyer appointments, confirmed or still requested.
 
 ## Before launch: content onboarding
 

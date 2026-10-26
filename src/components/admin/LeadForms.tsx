@@ -6,7 +6,7 @@ import { Area, Field, Select, Status, Submit, useFormAction } from "./kit";
 
 type Staff = { id: string; name: string };
 
-const toLocalInput = (iso: string | null) => (iso ? new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 16).replace(" ", "T") : "");
+export const toLocalInput = (iso: string | null) => (iso ? new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 16).replace(" ", "T") : "");
 
 export function EnquiryUpdateForm({ id, status, assignedToId, followUpAt, staff }: { id: string; status: string; assignedToId: string | null; followUpAt: string | null; staff: Staff[] }) {
   const { state, onSubmit, pending } = useFormAction(updateEnquiry.bind(null, id));
@@ -47,7 +47,7 @@ export function VisitUpdateForm({ id, status, assignedToId, followUpAt, schedule
   );
 }
 
-function AssigneeSelect({ staff, value, state }: { staff: Staff[]; value: string | null; state: Parameters<typeof Status>[0]["state"] }) {
+export function AssigneeSelect({ staff, value, state }: { staff: Staff[]; value: string | null; state: Parameters<typeof Status>[0]["state"] }) {
   return (
     <Select label="Assigned to" name="assignedToId" defaultValue={value ?? ""} state={state}>
       <option value="">Unassigned</option>
@@ -56,7 +56,7 @@ function AssigneeSelect({ staff, value, state }: { staff: Staff[]; value: string
   );
 }
 
-export function NoteForm({ target }: { target: { enquiryId?: string; siteVisitId?: string } }) {
+export function NoteForm({ target }: { target: { enquiryId?: string; siteVisitId?: string; purchaseId?: string } }) {
   const ref = useRef<HTMLFormElement>(null);
   const { state, onSubmit, pending } = useFormAction(async (prev, fd) => {
     const res = await addNote(target, prev, fd);

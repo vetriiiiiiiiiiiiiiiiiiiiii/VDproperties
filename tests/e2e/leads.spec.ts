@@ -58,14 +58,14 @@ test.describe.serial("enquiries and site visits", () => {
     await ctx.close();
   });
 
-  test("enquiry manager sees, assigns and annotates the leads", async ({ page }) => {
+  test("staff see, assign and annotate the leads", async ({ page }) => {
     await login(page, "enquiry");
     await page.getByRole("link", { name: /^Enquiries/ }).click();
     await page.getByRole("link", { name: "Priya E2E" }).click();
     await expect(page).toHaveURL(/\/admin\/enquiries\/[a-z0-9]+$/);
     await expect(page.getByText("VDP-S001 · East-facing residential plot")).toBeVisible();
     await page.getByLabel("Status").selectOption("CONTACTED");
-    await page.getByLabel("Assigned to").selectOption({ label: "E2E Enquiry" });
+    await page.getByLabel("Assigned to").selectOption({ label: "E2E Staff" });
     await page.getByRole("button", { name: "Update enquiry" }).click();
     await expect(page.getByText("Enquiry updated.")).toBeVisible();
     await page.getByLabel("Add an internal note").fill("Called back, visiting Saturday.");
@@ -79,6 +79,9 @@ test.describe.serial("enquiries and site visits", () => {
     await page.getByRole("button", { name: "Update visit" }).click();
     await expect(page.getByText("Enter the confirmed date and time")).toBeVisible();
 
+    // Exports are for admins.
+    expect((await page.request.get("/api/admin/leads/export?kind=enquiries")).status()).toBe(403);
+    await login(page, "property");
     const res = await page.request.get("/api/admin/leads/export?kind=enquiries");
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain("Priya E2E");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { csvCell } from "@/lib/csv";
 import { formatPrice, slugify, whatsappHref } from "@/lib/format";
-import { can } from "@/lib/rbac";
+import { assignableRoles, can } from "@/lib/rbac";
 import { parseFaqs, parseSocialLinks, parseTitledBlocks } from "@/lib/settings-format";
 import { looksLikeLinkSpam, spamReason, submissionFingerprint } from "@/lib/spam";
 import { checkVisitDate, enquirySchema, passwordPolicy, siteVisitSchema } from "@/lib/validation";
@@ -60,13 +60,32 @@ describe("spam protection", () => {
 });
 
 describe("roles", () => {
-  it("separates property and enquiry responsibilities", () => {
-    expect(can("PROPERTY_MANAGER", "properties:manage")).toBe(true);
-    expect(can("PROPERTY_MANAGER", "leads:manage")).toBe(false);
-    expect(can("ENQUIRY_MANAGER", "leads:export")).toBe(true);
-    expect(can("ENQUIRY_MANAGER", "properties:manage")).toBe(false);
-    expect(can("ENQUIRY_MANAGER", "settings:manage")).toBe(false);
-    expect(can("SUPER_ADMIN", "users:manage")).toBe(true);
+  it("gives each staff role its own reach", () => {
+    // Super Admin: everything, including settings.
+    expect(can("SUPER_ADMIN", "settings:manage")).toBe(true);
+    // Admin: publishes and approves, manages people, but not company settings.
+    expect(can("ADMIN", "properties:publish")).toBe(true);
+    expect(can("ADMIN", "submissions:approve")).toBe(true);
+    expect(can("ADMIN", "users:manage")).toBe(true);
+    expect(can("ADMIN", "settings:manage")).toBe(false);
+    // Staff: drafts and leads, never publishing, approving, exports or people.
+    expect(can("STAFF", "properties:manage")).toBe(true);
+    expect(can("STAFF", "properties:publish")).toBe(false);
+    expect(can("STAFF", "submissions:approve")).toBe(false);
+    expect(can("STAFF", "leads:export")).toBe(false);
+    expect(can("STAFF", "users:manage")).toBe(false);
+    // Zonal officer: reviews and leads (scoped to zones elsewhere), no listing editing.
+    expect(can("ZONAL_OFFICER", "submissions:review")).toBe(true);
+    expect(can("ZONAL_OFFICER", "purchases:manage")).toBe(true);
+    expect(can("ZONAL_OFFICER", "properties:manage")).toBe(false);
+    expect(can("ZONAL_OFFICER", "customers:view")).toBe(false);
+    // Customers never reach the admin.
+    expect(can("CUSTOMER", "dashboard:view")).toBe(false);
+  });
+  it("lets admins hand out only staff and zonal officer roles", () => {
+    expect(assignableRoles("SUPER_ADMIN")).toContain("ADMIN");
+    expect(assignableRoles("ADMIN")).toEqual(["STAFF", "ZONAL_OFFICER"]);
+    expect(assignableRoles("STAFF")).toEqual([]);
   });
   it("enforces a password policy", () => {
     expect(passwordPolicy.safeParse("short").success).toBe(false);

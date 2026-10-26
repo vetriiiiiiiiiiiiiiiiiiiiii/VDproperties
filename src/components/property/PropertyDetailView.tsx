@@ -25,6 +25,7 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
     preview ? Promise.resolve([]) : getRelatedProperties({ id: p.id, type: p.type, locationId: p.locationId, publicPrice: p.publicPrice }),
   ]);
   const viewer = preview ? null : await getCurrentUser();
+  const buyerAccount = viewer?.role === "CUSTOMER" ? await db.user.findUnique({ where: { id: viewer.id }, select: { name: true, phone: true } }) : null;
   const isSaved = viewer?.role === "CUSTOMER" ? !!(await db.savedProperty.findUnique({ where: { userId_propertyId: { userId: viewer.id, propertyId: p.id } } })) : false;
   const home = isHomeType(p.type);
   const price = p.publicPrice === null ? null : Number(p.publicPrice);
@@ -146,6 +147,12 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
             </dl>
           )}
 
+          {p.source === "OWNER" && (
+            <p className="mt-8 flex items-start gap-3 rounded-xl bg-white p-4 text-sm text-slate">
+              <span className="shrink-0 rounded-full bg-gold/20 px-2.5 py-1 text-xs font-semibold text-gold-deep">{t.market.ownerTag}</span>
+              <span>{t.market.ownerNote}</span>
+            </p>
+          )}
           {p.summary && <p className="mt-10 font-serif text-2xl leading-snug text-ink">{p.summary}</p>}
           {p.description && (
             <div className="prose-vd mt-6">
@@ -249,6 +256,8 @@ export async function PropertyDetailView({ p, preview = false }: { p: PropertyDe
                 canVisit
                 visit={{ closedWeekdays: settings.visitClosedWeekdays, blackoutDates: settings.visitBlackoutDates, maxDays: VISIT_WINDOW_DAYS }}
                 businessName={settings.businessName}
+                buyer={{ signedIn: !!buyerAccount, own: !!viewer && p.sellerId === viewer.id, name: buyerAccount?.name ?? "", phone: buyerAccount?.phone ?? "" }}
+                next={href(`/properties/${p.slug}#enquire`)}
                 phoneHref={call}
                 phone={settings.phone ?? undefined}
                 whatsappHref={wa}

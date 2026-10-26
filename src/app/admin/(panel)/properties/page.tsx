@@ -14,7 +14,9 @@ export default async function AdminProperties({ searchParams }: { searchParams: 
   await requirePage("properties:manage");
   const sp = await searchParams;
   const where: Prisma.PropertyWhereInput = {
-    ...(sp.q && { OR: [{ title: { contains: sp.q, mode: "insensitive" } }, { referenceCode: { contains: sp.q, mode: "insensitive" } }] }),
+    // Owner submissions live in the Submissions queue until an Admin approves them.
+    OR: [{ source: "COMPANY" }, { submissionStatus: "APPROVED" }],
+    ...(sp.q && { AND: [{ OR: [{ title: { contains: sp.q, mode: "insensitive" } }, { referenceCode: { contains: sp.q, mode: "insensitive" } }] }] }),
     ...(sp.publication === "PUBLISHED" || sp.publication === "DRAFT" ? { publication: sp.publication } : {}),
     ...(["AVAILABLE", "RESERVED", "SOLD", "UNAVAILABLE"].includes(sp.availability ?? "") && { availability: sp.availability as "AVAILABLE" }),
     ...(sp.group === "land" && { type: { in: LAND_TYPES } }),

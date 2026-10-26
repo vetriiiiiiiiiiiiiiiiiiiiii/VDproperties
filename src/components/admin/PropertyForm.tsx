@@ -57,7 +57,9 @@ export function PropertyForm({
   locations,
   amenities,
   projects,
+  canPublish = true,
 }: {
+  canPublish?: boolean;
   id: string | null;
   values: PropertyFormValues;
   locations: { id: string; name: string; city: string | null }[];
@@ -189,7 +191,9 @@ export function PropertyForm({
 
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 border border-line bg-white/95 p-4 backdrop-blur">
         <Submit name="intent" value="save" pending={pending}>{id ? "Save changes" : "Save as draft"}</Submit>
-        {v.publication === "PUBLISHED" ? (
+        {!canPublish ? (
+          <span className="text-sm text-slate">An Admin publishes listings.</span>
+        ) : v.publication === "PUBLISHED" ? (
           <Submit name="intent" value="unpublish" variant="outline" pending={pending}>Unpublish</Submit>
         ) : (
           <Submit name="intent" value="publish" variant="gold" pending={pending}>{id ? "Publish" : "Save & publish"}</Submit>

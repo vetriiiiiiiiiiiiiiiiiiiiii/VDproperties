@@ -25,7 +25,7 @@ const NUMBERED: [RegExp, (v: Locale, n: number) => string][] = [
  */
 export function translateMessage(message: string, locale: Locale): string {
   if (locale === "en") return message;
-  for (const pick of [(d: (typeof DICTS)["en"]) => d.server.v, (d: (typeof DICTS)["en"]) => d.account.messages] as const) {
+  for (const pick of [(d: (typeof DICTS)["en"]) => d.server.v, (d: (typeof DICTS)["en"]) => d.account.messages, (d: (typeof DICTS)["en"]) => d.market.v] as const) {
     const en = pick(DICTS.en) as Record<string, unknown>;
     const key = Object.keys(en).find((k) => en[k] === message);
     if (key) return (pick(DICTS[locale]) as Record<string, unknown>)[key] as string;

@@ -46,7 +46,7 @@ export async function createBuildProject(_prev: ActionResult | null, fd: FormDat
 
     const customer = await db.user.findFirst({ where: { id: input.customerId, role: "CUSTOMER", active: true } });
     if (!customer) return { ok: false, message: "Choose a registered customer account.", errors: { customerId: "Customer not found" } };
-    if (input.managerId && !(await db.user.findFirst({ where: { id: input.managerId, active: true, role: { in: ["PROJECT_MANAGER", "SUPER_ADMIN"] } } }))) {
+    if (input.managerId && !(await db.user.findFirst({ where: { id: input.managerId, active: true, role: { in: ["SUPER_ADMIN", "ADMIN", "STAFF"] } } }))) {
       return { ok: false, message: "Choose an active project manager.", errors: { managerId: "Not a project manager" } };
     }
     if (input.propertyId && !(await db.property.findUnique({ where: { id: input.propertyId } }))) return { ok: false, message: "Property not found.", errors: { propertyId: "Not found" } };
@@ -117,7 +117,7 @@ export async function updateBuildProject(id: string, _prev: ActionResult | null,
         status: input.status,
         contractorName: input.contractorName ?? null,
         customerNote: input.customerNote ?? null,
-        ...(user.role === "SUPER_ADMIN" && { managerId: input.managerId ?? null }),
+        ...((user.role === "SUPER_ADMIN" || user.role === "ADMIN") && { managerId: input.managerId ?? null }),
       },
     });
     await audit({ actorId: user.id, action: "build.updated", entityType: "BuildProject", entityId: id, summary: `${project.code}: status ${project.status} → ${input.status}` });

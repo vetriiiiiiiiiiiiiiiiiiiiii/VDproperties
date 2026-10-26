@@ -6,6 +6,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { AVAILABILITY_LABEL, ENQUIRY_TYPE_LABEL, TIME_SLOT_LABEL } from "@/lib/labels";
 import { can } from "@/lib/rbac";
 import { getSettings, launchChecklist } from "@/lib/settings";
+import { enquiryScope, propertyScope, purchaseScope, siteVisitScope } from "@/lib/zones";
 
 export const metadata = { title: "Overview" };
 
@@ -16,14 +17,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const pub = { publication: "PUBLISHED" as const };
   const open = { availability: { in: ["AVAILABLE" as const, "RESERVED" as const] } };
 
+  // Zonal officers see figures for their zones only.
+  const [pScope, eScope, vScope, buyScope] = await Promise.all([propertyScope(user), enquiryScope(user), siteVisitScope(user), purchaseScope(user)]);
+  const [openSubmissions, newPurchases] = await Promise.all([
+    can(user.role, "submissions:review") ? db.property.count({ where: { source: "OWNER", submissionStatus: { in: ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED", "INSPECTED"] }, AND: [pScope] } }) : 0,
+    can(user.role, "purchases:manage") ? db.purchaseRequest.count({ where: { status: "NEW", AND: [buyScope] } }) : 0,
+  ]);
   const [published, plots, houses, ongoing, newEnquiries, upcomingVisits, recent, samples, settings] = await Promise.all([
-    db.property.count({ where: pub }),
-    db.property.count({ where: { ...pub, ...open, type: { in: ["RESIDENTIAL_PLOT", "LAND"] } } }),
-    db.property.count({ where: { ...pub, ...open, type: { in: ["HOUSE", "VILLA"] } } }),
+    db.property.count({ where: { ...pub, AND: [pScope] } }),
+    db.property.count({ where: { ...pub, ...open, type: { in: ["RESIDENTIAL_PLOT", "LAND"] }, AND: [pScope] } }),
+    db.property.count({ where: { ...pub, ...open, type: { in: ["HOUSE", "VILLA"] }, AND: [pScope] } }),
     db.project.count({ where: { ...pub, status: "ONGOING" } }),
-    db.enquiry.count({ where: { status: "NEW" } }),
-    db.siteVisit.count({ where: { status: { in: ["NEW", "CONTACTED", "SCHEDULED"] }, preferredDate: { gte: today } } }),
-    db.property.findMany({ orderBy: { updatedAt: "desc" }, take: 6, select: { id: true, title: true, referenceCode: true, publication: true, availability: true, updatedAt: true } }),
+    db.enquiry.count({ where: { status: "NEW", AND: [eScope] } }),
+    db.siteVisit.count({ where: { status: { in: ["NEW", "CONTACTED", "SCHEDULED"] }, preferredDate: { gte: today }, AND: [vScope] } }),
+    db.property.findMany({ where: { AND: [pScope], OR: [{ source: "COMPANY" }, { submissionStatus: "APPROVED" }] }, orderBy: { updatedAt: "desc" }, take: 6, select: { id: true, title: true, referenceCode: true, publication: true, availability: true, updatedAt: true } }),
     db.property.count({ where: { isSample: true } }),
     getSettings(),
   ]);
@@ -31,9 +38,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const leads = can(user.role, "leads:manage");
   const [latestEnquiries, nextVisits] = leads
     ? await Promise.all([
-        db.enquiry.findMany({ where: { status: "NEW" }, orderBy: { createdAt: "desc" }, take: 5, select: { id: true, name: true, type: true, propertyLabel: true, createdAt: true } }),
+        db.enquiry.findMany({ where: { status: "NEW", AND: [eScope] }, orderBy: { createdAt: "desc" }, take: 5, select: { id: true, name: true, type: true, propertyLabel: true, createdAt: true } }),
         db.siteVisit.findMany({
-          where: { status: { in: ["NEW", "CONTACTED", "SCHEDULED"] }, preferredDate: { gte: today } },
+          where: { status: { in: ["NEW", "CONTACTED", "SCHEDULED"] }, preferredDate: { gte: today }, AND: [vScope] },
           orderBy: { preferredDate: "asc" },
           take: 5,
           select: { id: true, name: true, subjectLabel: true, preferredDate: true, timeSlot: true, status: true, scheduledFor: true },
@@ -51,6 +58,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     ["Ongoing projects", ongoing, can(user.role, "projects:manage") ? "/admin/projects" : null],
     ["New enquiries", newEnquiries, leads ? "/admin/enquiries?status=NEW" : null],
     ["Upcoming site visits", upcomingVisits, leads ? "/admin/site-visits?upcoming=1" : null],
+    ...(can(user.role, "submissions:review") ? [["Owner submissions to review", openSubmissions, "/admin/submissions"] as [string, number, string]] : []),
+    ...(can(user.role, "purchases:manage") ? [["New purchase requests", newPurchases, "/admin/purchases?status=NEW"] as [string, number, string]] : []),
   ];
 
   return (

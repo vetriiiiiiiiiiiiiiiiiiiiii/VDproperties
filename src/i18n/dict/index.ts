@@ -2,6 +2,7 @@ import type { Locale } from "../config";
 import { account } from "./account";
 import { common } from "./common";
 import { home } from "./home";
+import { market } from "./market";
 import { listings } from "./listings";
 import { pages } from "./pages";
 import { plotfit } from "./plotfit";
@@ -12,6 +13,7 @@ function build(locale: Locale) {
   return {
     ...common[locale],
     home: home[locale],
+    market: market[locale],
     listings: listings[locale],
     pages: pages[locale],
     twin: twin[locale],

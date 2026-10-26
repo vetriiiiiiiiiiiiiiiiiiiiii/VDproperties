@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { requirePermission } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/format";
 import { HOME_TYPES } from "@/lib/labels";
@@ -13,6 +14,7 @@ import { deleteStored } from "@/lib/storage";
 import { alertSavedSearches } from "@/lib/alerts";
 import { formatPrice } from "@/lib/format";
 import { recordActivity } from "@/lib/platform";
+import { nextReferenceCode, uniquePropertySlug as uniqueSlug } from "@/lib/listings";
 import { checkbox, formObject, nullify, optHttpsUrl, optId, optInt, optLongText, optNum, optStr, runAction, type ActionResult } from "@/lib/admin";
 
 const propertySchema = z.object({
@@ -57,24 +59,22 @@ const propertySchema = z.object({
   intent: z.enum(["save", "publish", "unpublish"]).default("save"),
 });
 
-async function nextReferenceCode() {
-  const last = await db.property.findFirst({ where: { referenceCode: { startsWith: "VDP-0" } }, orderBy: { referenceCode: "desc" }, select: { referenceCode: true } });
-  const n = last ? Number(last.referenceCode.slice(4)) + 1 : 1;
-  return `VDP-${String(n).padStart(4, "0")}`;
-}
-
-async function uniqueSlug(base: string, exceptId?: string) {
-  let slug = base || "property";
-  for (let i = 2; await db.property.findFirst({ where: { slug, ...(exceptId && { id: { not: exceptId } }) }, select: { id: true } }); i++) slug = `${base}-${i}`;
-  return slug;
-}
-
 export async function saveProperty(id: string | null, _prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const user = await requirePermission("properties:manage");
     const input = propertySchema.parse(formObject(fd, ["amenityIds"]));
-    const existing = id ? await db.property.findUnique({ where: { id }, select: { publication: true, publishedAt: true, title: true, publicPrice: true, availability: true } }) : null;
+    const existing = id ? await db.property.findUnique({ where: { id }, select: { publication: true, publishedAt: true, title: true, publicPrice: true, availability: true, source: true, submissionStatus: true, featured: true } }) : null;
     if (id && !existing) return { ok: false, message: "This property no longer exists." };
+    // Staff prepare drafts; only admins change what's live, featured or for sale.
+    const canPublish = can(user.role, "properties:publish");
+    if (input.intent !== "save" && !canPublish) return { ok: false, message: "Only an Admin can publish or unpublish listings." };
+    if (!canPublish) {
+      input.featured = existing?.featured ?? false;
+      if (existing) input.availability = existing.availability;
+    }
+    if (input.intent === "publish" && existing?.source === "OWNER" && existing.submissionStatus !== "APPROVED") {
+      return { ok: false, message: "Approve the owner's submission (Submissions) before publishing it." };
+    }
 
     if (input.priceDisplay === "SHOW_PRICE" && input.priceAmount === undefined) {
       return { ok: false, message: "Add a price, or choose “Contact for price”.", errors: { priceAmount: "Required when the price is shown" } };
@@ -144,7 +144,7 @@ export async function saveProperty(id: string | null, _prev: ActionResult | null
 }
 
 export async function setAvailability(id: string, availability: "AVAILABLE" | "RESERVED" | "SOLD" | "UNAVAILABLE") {
-  const user = await requirePermission("properties:manage");
+  const user = await requirePermission("properties:publish");
   const before = await db.property.findUniqueOrThrow({ where: { id }, select: { availability: true } });
   const p = await db.property.update({ where: { id }, data: { availability } });
   if (before.availability !== availability) await recordActivity(id, "AVAILABILITY", `Availability changed to ${availability.toLowerCase()}`);
@@ -153,7 +153,7 @@ export async function setAvailability(id: string, availability: "AVAILABLE" | "R
 }
 
 export async function toggleFeatured(id: string) {
-  const user = await requirePermission("properties:manage");
+  const user = await requirePermission("properties:publish");
   const p = await db.property.findUniqueOrThrow({ where: { id } });
   await db.property.update({ where: { id }, data: { featured: !p.featured } });
   await audit({ actorId: user.id, action: "property.featured", entityType: "Property", entityId: id, summary: `${p.referenceCode} ${p.featured ? "removed from" : "added to"} featured` });
@@ -162,7 +162,7 @@ export async function toggleFeatured(id: string) {
 
 /** Deleting keeps enquiry history: leads keep their stored property label and lose only the link. */
 export async function deleteProperty(id: string) {
-  const user = await requirePermission("properties:manage");
+  const user = await requirePermission("properties:publish");
   const p = await db.property.findUniqueOrThrow({ where: { id }, include: { images: true } });
   if (p.publication === "PUBLISHED") throw new Error("Unpublish the listing before deleting it.");
   await db.property.delete({ where: { id } });

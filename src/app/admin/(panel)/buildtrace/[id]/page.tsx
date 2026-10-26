@@ -47,7 +47,7 @@ export default async function BuildProjectAdmin({ params, searchParams }: { para
   if (!p) notFound();
   if (!canManageProject(user, p)) redirect("/admin?denied=1");
   const { created } = await searchParams;
-  const managers = await db.user.findMany({ where: { active: true, role: { in: ["PROJECT_MANAGER", "SUPER_ADMIN"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+  const managers = await db.user.findMany({ where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN", "STAFF"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   const fin = projectFinancials(p);
   const msOpts = p.milestones.map((m) => ({ id: m.id, label: m.name }));
   const approver = can(user.role, "buildtrace:approve");
@@ -159,7 +159,7 @@ export default async function BuildProjectAdmin({ params, searchParams }: { para
               <div><dt className="inline text-slate">Schedule: </dt><dd className="inline">{utc(p.plannedStart)} → {utc(p.plannedEnd)}</dd></div>
             </dl>
             <p className="mb-4 whitespace-pre-line border-l-4 border-line pl-3 text-sm text-slate">{p.scope}</p>
-            <ProjectStatusForm id={p.id} status={p.status} contractorName={p.contractorName ?? ""} customerNote={p.customerNote ?? ""} managerId={p.managerId ?? ""} managers={managers.map((m) => ({ id: m.id, label: m.name }))} canAssign={user.role === "SUPER_ADMIN"} />
+            <ProjectStatusForm id={p.id} status={p.status} contractorName={p.contractorName ?? ""} customerNote={p.customerNote ?? ""} managerId={p.managerId ?? ""} managers={managers.map((m) => ({ id: m.id, label: m.name }))} canAssign={user.role === "SUPER_ADMIN" || user.role === "ADMIN"} />
           </Panel>
 
           <Panel title="Customer questions">

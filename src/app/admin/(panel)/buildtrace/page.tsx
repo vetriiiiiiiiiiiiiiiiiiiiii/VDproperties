@@ -11,7 +11,7 @@ export const metadata = { title: "BuildTrace" };
 export default async function BuildTraceList() {
   const user = await requirePage("buildtrace:manage");
   const projects = await db.buildProject.findMany({
-    where: user.role === "SUPER_ADMIN" ? {} : { managerId: user.id },
+    where: user.role === "SUPER_ADMIN" || user.role === "ADMIN" ? {} : { managerId: user.id },
     orderBy: { updatedAt: "desc" },
     include: { customer: { select: { name: true } }, manager: { select: { name: true } }, milestones: { select: { status: true } }, changes: { where: { status: "PROPOSED" }, select: { id: true } }, questions: { where: { reply: null }, select: { id: true } } },
   });
@@ -19,7 +19,7 @@ export default async function BuildTraceList() {
     <>
       <PageHeader
         title="BuildTrace projects"
-        description={user.role === "SUPER_ADMIN" ? "All construction projects." : "Projects assigned to you."}
+        description={user.role === "SUPER_ADMIN" || user.role === "ADMIN" ? "All construction projects." : "Projects assigned to you."}
         actions={can(user.role, "buildtrace:create") ? <Link href="/admin/buildtrace/new" className="btn btn-primary min-h-10 text-sm">New project</Link> : undefined}
       />
       <Notice>A project can only be created once a signed agreement or written authorisation with the customer is in place.</Notice>

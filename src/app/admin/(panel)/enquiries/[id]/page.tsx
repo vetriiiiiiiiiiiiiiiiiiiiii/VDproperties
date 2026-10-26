@@ -7,21 +7,24 @@ import { requirePage } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatArea, formatDateTime, phoneHref } from "@/lib/format";
 import { ENQUIRY_STATUS_LABEL, ENQUIRY_TYPE_LABEL } from "@/lib/labels";
+import { requireInScopePage, assignableStaff } from "@/lib/zones";
 
 export const metadata = { title: "Enquiry" };
 
 export default async function EnquiryDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requirePage("leads:manage");
+  const user = await requirePage("leads:manage");
+  const { id } = await params;
+  await requireInScopePage(user, "enquiry", id);
   const e = await db.enquiry.findUnique({
-    where: { id: (await params).id },
+    where: { id },
     include: {
-      property: { select: { id: true, slug: true, publication: true } },
+      property: { select: { id: true, slug: true, publication: true, location: { select: { zoneId: true } } } },
       project: { select: { id: true } },
       notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
     },
   });
   if (!e) notFound();
-  const staff = await db.user.findMany({ where: { active: true, role: { in: ["SUPER_ADMIN", "ENQUIRY_MANAGER"] } }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const staff = await assignableStaff(e.property?.location?.zoneId);
   const rows: [string, React.ReactNode][] = [
     ["Received", formatDateTime(e.createdAt)],
     ["Type", ENQUIRY_TYPE_LABEL[e.type]],

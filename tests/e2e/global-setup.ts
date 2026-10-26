@@ -15,9 +15,10 @@ export default async function globalSetup() {
   await db.user.createMany({
     data: [
       { email: USERS.admin.email, name: "E2E Admin", role: "SUPER_ADMIN", passwordHash: await hash(USERS.admin.password) },
-      { email: USERS.property.email, name: "E2E Property", role: "PROPERTY_MANAGER", passwordHash: await hash(USERS.property.password) },
-      { email: USERS.enquiry.email, name: "E2E Enquiry", role: "ENQUIRY_MANAGER", passwordHash: await hash(USERS.enquiry.password) },
-      { email: USERS.pm.email, name: "E2E PM", role: "PROJECT_MANAGER", passwordHash: await hash(USERS.pm.password) },
+      { email: USERS.property.email, name: "E2E Manager", role: "ADMIN", passwordHash: await hash(USERS.property.password) },
+      { email: USERS.enquiry.email, name: "E2E Staff", role: "STAFF", passwordHash: await hash(USERS.enquiry.password) },
+      { email: USERS.pm.email, name: "E2E PM", role: "STAFF", passwordHash: await hash(USERS.pm.password) },
+      { email: USERS.zonal.email, name: "E2E Zonal", role: "ZONAL_OFFICER", passwordHash: await hash(USERS.zonal.password) },
     ],
   });
   await db.$disconnect();

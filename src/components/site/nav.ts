@@ -17,6 +17,7 @@ export function buildNav(t: Dict): NavItem[] {
         { label: n.completed, href: "/projects/completed", note: n.completedNote },
       ],
     },
+    { key: "sell", label: n.sell, href: "/sell" },
     { key: "plotfit", label: n.plotfit, href: "/plotfit" },
     { key: "twin", label: n.twin, href: "/twin" },
     { key: "studio", label: n.studio, href: "/studio" },

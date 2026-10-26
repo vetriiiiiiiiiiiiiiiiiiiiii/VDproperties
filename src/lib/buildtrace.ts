@@ -44,7 +44,7 @@ export const EVIDENCE_LABEL = {
 
 /** Super Admins manage every project; Project Managers only the projects assigned to them. */
 export function canManageProject(user: SessionUser, project: Pick<BuildProject, "managerId">) {
-  if (user.role === "SUPER_ADMIN") return true;
+  if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
   return can(user.role, "buildtrace:manage") && project.managerId === user.id;
 }
 

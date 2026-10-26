@@ -223,7 +223,8 @@ test.describe.serial("connected platform journey", () => {
     await expect(pmPage.getByText("When does the foundation work start?")).toBeVisible();
     await pm.close();
 
-    await login(page, "property");
+    // Staff who aren't assigned to the project can't open it.
+    await login(page, "enquiry");
     await page.goto(projectUrl);
     await expect(page).toHaveURL(/\/admin\?denied=1/);
   });

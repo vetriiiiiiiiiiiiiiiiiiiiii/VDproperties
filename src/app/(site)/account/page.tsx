@@ -22,6 +22,11 @@ export default async function AccountPage() {
   const me = await requireCustomerPage("/account");
   const { t, f } = await getI18n();
   const d = t.account.dash;
+  const [listings, purchases] = await Promise.all([
+    db.property.findMany({ where: { sellerId: me.id, source: "OWNER" }, orderBy: { createdAt: "desc" }, take: 6, select: { id: true, referenceCode: true, title: true, submissionStatus: true, publication: true } }),
+    db.purchaseRequest.findMany({ where: { buyerId: me.id }, orderBy: { createdAt: "desc" }, take: 20, include: { property: { select: { slug: true, publication: true } } } }),
+  ]);
+  const mk = t.market;
   const [user, saved, scenarios, searches, enquiries, visits, projects] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: me.id }, select: { name: true, email: true, marketingConsent: true } }),
     db.savedProperty.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" }, include: { property: { include: { images: { take: 1, orderBy: { sortOrder: "asc" } }, location: true } } } }),
@@ -42,6 +47,51 @@ export default async function AccountPage() {
         </div>
         <form action={logoutCustomer} className="relative"><button className="btn btn-outline">{d.signOut}</button></form>
       </header>
+
+      <section className="mt-10 grid gap-6 lg:grid-cols-2" aria-label={`${mk.mine.title} · ${mk.purchases.title}`}>
+        <div id="listings">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="annot text-emerald">{mk.mine.title}</h2>
+            <Link href="/account/listings/new" className="link-arrow text-emerald">{mk.mine.add}</Link>
+          </div>
+          {listings.length ? (
+            <ul className="surface mt-4 divide-y divide-line text-sm">
+              {listings.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <Link href={`/account/listings/${l.id}`} className="font-semibold text-navy hover:underline">{l.referenceCode} · {l.title}</Link>
+                  <span className="text-xs text-slate">{l.publication === "PUBLISHED" ? mk.mine.live : l.submissionStatus ? mk.status[l.submissionStatus] : ""}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate">{mk.mine.empty} <Link href="/sell" className="underline">{t.nav.sell}</Link></p>
+          )}
+        </div>
+        <div id="purchases">
+          <h2 className="annot text-emerald">{mk.purchases.title}</h2>
+          {purchases.length ? (
+            <ul className="surface mt-4 divide-y divide-line text-sm">
+              {purchases.map((r) => (
+                <li key={r.id} className="px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {r.property?.publication === "PUBLISHED" ? <Link href={`/properties/${r.property.slug}`} className="font-semibold text-navy hover:underline">{r.propertyLabel}</Link> : <span className="font-semibold">{r.propertyLabel}</span>}
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${r.status === "APPOINTMENT_SCHEDULED" || r.status === "BOOKED" || r.status === "COMPLETED" ? "bg-emerald text-ivory" : "bg-paper text-slate"}`}>{mk.purchaseStatus[r.status]}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate">
+                    {r.scheduledFor
+                      ? mk.purchases.appointment(mk.buy.modes[r.mode], f.dateTime(r.scheduledFor))
+                      : mk.purchases.requested(mk.buy.modes[r.mode], f.date(r.preferredDate, { dateStyle: "medium", timeZone: "UTC" }))}
+                    {r.offerAmount !== null && ` · ${mk.purchases.offer(f.price(Number(r.offerAmount)))}`}
+                  </p>
+                  {r.scheduledFor && r.appointmentNote && <p className="mt-1 whitespace-pre-line text-xs text-ink">{r.appointmentNote}</p>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate">{mk.purchases.empty}</p>
+          )}
+        </div>
+      </section>
 
       {projects.length > 0 && (
         <section className="mt-10" aria-labelledby="bt-h">

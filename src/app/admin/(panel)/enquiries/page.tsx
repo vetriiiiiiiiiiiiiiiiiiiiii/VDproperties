@@ -5,6 +5,8 @@ import { requirePage } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { ENQUIRY_STATUS_LABEL, ENQUIRY_TYPE_LABEL } from "@/lib/labels";
+import { can } from "@/lib/rbac";
+import { enquiryScope } from "@/lib/zones";
 
 export const metadata = { title: "Enquiries" };
 
@@ -17,6 +19,7 @@ export default async function Enquiries({ searchParams }: { searchParams: Promis
   const page = Math.max(1, Number(sp.page) || 1);
   const q = sp.q?.trim().slice(0, 80);
   const where: Prisma.EnquiryWhereInput = {
+    AND: [await enquiryScope(user)],
     ...(q && {
       OR: [
         { name: { contains: q, mode: "insensitive" } },
@@ -38,7 +41,7 @@ export default async function Enquiries({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageHeader title="Enquiries" description={`${total} matching`} actions={<a href="/api/admin/leads/export?kind=enquiries" className="btn btn-outline min-h-10 text-sm text-navy">Export CSV</a>} />
+      <PageHeader title="Enquiries" description={`${total} matching`} actions={can(user.role, "leads:export") ? <a href="/api/admin/leads/export?kind=enquiries" className="btn btn-outline min-h-10 text-sm text-navy">Export CSV</a> : undefined} />
       <form className="mb-6 grid gap-3 border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto_auto]" role="search">
         <input name="q" defaultValue={q} placeholder="Name, phone, email or property" aria-label="Search enquiries" className="field" />
         <select name="status" defaultValue={sp.status ?? ""} aria-label="Status" className="field">

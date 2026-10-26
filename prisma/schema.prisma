@@ -10,13 +10,59 @@ datasource db {
 // ─────────────────────────────── Enums
 
 enum Role {
+  /// Everything, including team, roles and company settings. At least one must stay active.
   SUPER_ADMIN
-  PROPERTY_MANAGER
-  ENQUIRY_MANAGER
-  /// Staff or contractor managing construction projects in BuildTrace.
-  PROJECT_MANAGER
-  /// Public customer account: saved properties, scenarios, own enquiries and own projects only.
+  /// Runs the business: approves and publishes listings, manages zones, staff and zonal officers.
+  ADMIN
+  /// Day-to-day work: listing drafts, leads, appointments and assigned BuildTrace projects.
+  STAFF
+  /// Sees and works on properties, owner submissions and leads in their assigned zones only.
+  ZONAL_OFFICER
+  /// Public customer account: own listings, saved items, enquiries, purchase requests and projects only.
   CUSTOMER
+}
+
+/// Who put a property on the market.
+enum ListingSource {
+  COMPANY
+  OWNER
+}
+
+/// Review state of a property submitted by its owner. Null for company listings.
+enum SubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  INSPECTED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum PurchaseStatus {
+  NEW
+  CONTACTED
+  APPOINTMENT_SCHEDULED
+  NEGOTIATING
+  /// Token or booking agreement recorded offline; the property is reserved.
+  BOOKED
+  /// Sale completed and registered.
+  COMPLETED
+  /// Not proceeding.
+  CLOSED
+}
+
+enum AppointmentMode {
+  SITE_VISIT
+  OFFICE
+  VIDEO_CALL
+}
+
+enum FundingSource {
+  OWN_FUNDS
+  HOME_LOAN
+  BOTH
+  UNDECIDED
 }
 
 /// How reliable a property's mapped boundary is. Never shown as "surveyed" without evidence.
@@ -183,6 +229,13 @@ model User {
   assignedEnquiries  Enquiry[]          @relation("EnquiryAssignee")
   assignedSiteVisits SiteVisit[]        @relation("SiteVisitAssignee")
   notes              LeadNote[]
+  /// Zones a zonal officer covers.
+  zones              Zone[]             @relation("ZoneOfficers")
+  sellerListings     Property[]         @relation("PropertySeller")
+  inspections        Property[]         @relation("PropertyInspector")
+  submissionEvents   SubmissionEvent[]
+  purchaseRequests   PurchaseRequest[]  @relation("PurchaseBuyer")
+  assignedPurchases  PurchaseRequest[]  @relation("PurchaseAssignee")
 }
 
 /// Server-side sessions. Only a SHA-256 hash of the cookie token is stored.
@@ -225,10 +278,23 @@ model Location {
   state         String?
   /// Marks a locality the company actively serves. Used for honest location SEO.
   isServiceArea Boolean    @default(false)
+  zoneId        String?
+  zone          Zone?      @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   properties    Property[]
   projects      Project[]
+}
+
+/// A group of locations looked after by one or more zonal officers.
+model Zone {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  locations   Location[]
+  officers    User[]     @relation("ZoneOfficers")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 model Amenity {
@@ -311,6 +377,25 @@ model Property {
   seoTitle       String?
   seoDescription String?
 
+  // ── Owner listings ("Sell your property"). Seller details are private and never shown publicly.
+  source             ListingSource     @default(COMPANY)
+  sellerId           String?
+  seller             User?             @relation("PropertySeller", fields: [sellerId], references: [id], onDelete: SetNull)
+  submissionStatus   SubmissionStatus?
+  submittedAt        DateTime?
+  /// Owner, joint owner, power of attorney holder or family member.
+  sellerRelation     String?
+  /// Full address as given by the seller (private).
+  sellerAddress      String?
+  /// Town or area as typed by the seller, used until staff pick a catalogue location.
+  sellerLocationText String?
+  inspectedById      String?
+  inspectedBy        User?             @relation("PropertyInspector", fields: [inspectedById], references: [id], onDelete: SetNull)
+  inspectedAt        DateTime?
+  inspectionNotes    String?
+  submissionEvents   SubmissionEvent[]
+  purchaseRequests   PurchaseRequest[]
+
   amenities     Amenity[]
   images        PropertyImage[]
   documents     PropertyDocument[]
@@ -322,16 +407,72 @@ model Property {
   scenarios     PlanningScenario[]
   buildProjects BuildProject[]
 
-  publishedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
+  translations Json      @default("{}")
 
   @@index([publication, availability])
   @@index([type])
   @@index([publicPrice])
   @@index([locationId])
-  /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
-  translations Json @default("{}")
+  @@index([source, submissionStatus])
+  @@index([sellerId])
+}
+
+/// The review trail of an owner submission. Messages marked visibleToSeller appear in the seller's account.
+model SubmissionEvent {
+  id              String            @id @default(cuid())
+  propertyId      String
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  actorId         String?
+  actor           User?             @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  status          SubmissionStatus?
+  message         String?
+  visibleToSeller Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+
+  @@index([propertyId, createdAt])
+}
+
+/// A signed-in buyer's request to buy a listed property, with a preferred appointment.
+/// No payment is taken online; bookings and sales are recorded by staff.
+model PurchaseRequest {
+  id              String          @id @default(cuid())
+  status          PurchaseStatus  @default(NEW)
+  propertyId      String?
+  property        Property?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  /// Kept even if the listing is removed.
+  propertyLabel   String
+  buyerId         String?
+  buyer           User?           @relation("PurchaseBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  name            String
+  phone           String
+  email           String?
+  offerAmount     BigInt?
+  funding         FundingSource   @default(UNDECIDED)
+  timeline        String?
+  message         String?
+  mode            AppointmentMode
+  preferredDate   DateTime        @db.Date
+  timeSlot        TimeSlot
+  /// Set by staff once the appointment is confirmed with the buyer.
+  scheduledFor    DateTime?
+  /// Shared with the buyer once scheduled: meeting point, office address or call link.
+  appointmentNote String?
+  consent         Boolean         @default(false)
+  assignedToId    String?
+  assignedTo      User?           @relation("PurchaseAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  followUpAt      DateTime?
+  fingerprint     String
+  notes           LeadNote[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status, createdAt])
+  @@index([buyerId])
+  @@index([fingerprint, createdAt])
 }
 
 model PropertyImage {
@@ -384,7 +525,7 @@ model Project {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
-  translations Json @default("{}")
+  translations   Json              @default("{}")
 }
 
 model ProjectImage {
@@ -476,15 +617,17 @@ model SiteVisit {
 }
 
 model LeadNote {
-  id          String     @id @default(cuid())
+  id          String           @id @default(cuid())
   body        String
   authorId    String?
-  author      User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  author      User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
   enquiryId   String?
-  enquiry     Enquiry?   @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  enquiry     Enquiry?         @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   siteVisitId String?
-  siteVisit   SiteVisit? @relation(fields: [siteVisitId], references: [id], onDelete: Cascade)
-  createdAt   DateTime   @default(now())
+  siteVisit   SiteVisit?       @relation(fields: [siteVisitId], references: [id], onDelete: Cascade)
+  purchaseId  String?
+  purchase    PurchaseRequest? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
 }
 
 // ─────────────────────────────── Company profile (single row, edited in /admin/settings)
@@ -537,7 +680,7 @@ model SiteSettings {
   aboutImageAlt        String?
   updatedAt            DateTime @updatedAt
   /// Tamil (and future) versions of customer-facing text: { ta: { field: value } }. Empty fields fall back to English.
-  translations Json @default("{}")
+  translations         Json     @default("{}")
 }
 
 // ─────────────────────────────── Property Twin

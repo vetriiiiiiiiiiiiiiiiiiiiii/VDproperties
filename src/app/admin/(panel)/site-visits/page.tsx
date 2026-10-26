@@ -5,15 +5,18 @@ import { requirePage } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { SITE_VISIT_STATUS_LABEL, TIME_SLOT_LABEL } from "@/lib/labels";
+import { can } from "@/lib/rbac";
+import { siteVisitScope } from "@/lib/zones";
 
 export const metadata = { title: "Site visits" };
 
 export default async function SiteVisits({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; upcoming?: string }> }) {
-  await requirePage("leads:manage");
+  const user = await requirePage("leads:manage");
   const sp = await searchParams;
   const q = sp.q?.trim().slice(0, 80);
   const today = new Date(new Date().toISOString().slice(0, 10));
   const where: Prisma.SiteVisitWhereInput = {
+    AND: [await siteVisitScope(user)],
     ...(q && { OR: [{ name: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { subjectLabel: { contains: q, mode: "insensitive" } }] }),
     ...(sp.status && sp.status in SITE_VISIT_STATUS_LABEL && { status: sp.status as "NEW" }),
     ...(sp.upcoming === "1" && { preferredDate: { gte: today }, status: { in: ["NEW", "CONTACTED", "SCHEDULED"] } }),
@@ -24,7 +27,7 @@ export default async function SiteVisits({ searchParams }: { searchParams: Promi
       <PageHeader
         title="Site visit requests"
         description="Requests aren't appointments until you confirm a time with the visitor and mark them Scheduled."
-        actions={<a href="/api/admin/leads/export?kind=site-visits" className="btn btn-outline min-h-10 text-sm text-navy">Export CSV</a>}
+        actions={can(user.role, "leads:export") ? <a href="/api/admin/leads/export?kind=site-visits" className="btn btn-outline min-h-10 text-sm text-navy">Export CSV</a> : undefined}
       />
       <form className="mb-6 grid gap-3 border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_auto_auto]" role="search">
         <input name="q" defaultValue={q} placeholder="Name, phone or property" aria-label="Search site visits" className="field" />

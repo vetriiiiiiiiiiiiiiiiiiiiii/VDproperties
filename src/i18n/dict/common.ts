@@ -20,6 +20,7 @@ const en = {
   faqs: "FAQs",
   nav: {
     buy: "Buy",
+    sell: "Sell",
     allProperties: "All properties",
     allPropertiesNote: "Search every listing",
     plots: "Residential plots & land",
@@ -270,6 +271,7 @@ const ta: CommonDict = {
   faqs: "கேள்வி-பதில்கள்",
   nav: {
     buy: "வாங்க",
+    sell: "விற்க",
     allProperties: "அனைத்து சொத்துகள்",
     allPropertiesNote: "எல்லா விளம்பரங்களிலும் தேடுங்கள்",
     plots: "குடியிருப்பு மனைகள் & நிலம்",

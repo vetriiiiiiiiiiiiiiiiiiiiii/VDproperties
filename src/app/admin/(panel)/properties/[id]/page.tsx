@@ -11,6 +11,7 @@ import { Panel } from "@/components/admin/kit";
 import { Notice, PageHeader } from "@/components/admin/PageHeader";
 import { PropertyForm, type PropertyFormValues } from "@/components/admin/PropertyForm";
 import { requirePage } from "@/lib/auth";
+import { can } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { propertyFormOptions } from "../form-data";
@@ -18,14 +19,16 @@ import { propertyFormOptions } from "../form-data";
 export const metadata = { title: "Edit property" };
 
 export default async function EditProperty({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
-  await requirePage("properties:manage");
+  const user = await requirePage("properties:manage");
+  const canPublish = can(user.role, "properties:publish");
   const { id } = await params;
   const { created } = await searchParams;
   const p = await db.property.findUnique({
     where: { id },
-    include: { amenities: { select: { id: true } }, images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }, documents: { orderBy: { createdAt: "asc" } }, passport: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], include: { reviewer: { select: { name: true } } } }, activity: { orderBy: { createdAt: "desc" }, take: 15 }, _count: { select: { enquiries: true, siteVisits: true } } },
+    include: { seller: { select: { name: true, email: true, phone: true } }, amenities: { select: { id: true } }, images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }, documents: { orderBy: { createdAt: "asc" } }, passport: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], include: { reviewer: { select: { name: true } } } }, activity: { orderBy: { createdAt: "desc" }, take: 15 }, _count: { select: { enquiries: true, siteVisits: true } } },
   });
-  if (!p) notFound();
+  // Unapproved owner submissions are reviewed in the Submissions queue, not edited here.
+  if (!p || (p.source === "OWNER" && p.submissionStatus !== "APPROVED")) notFound();
   const [options, developers] = await Promise.all([propertyFormOptions(), db.developer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, authorised: true } })]);
   const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
   const values: PropertyFormValues = {
@@ -56,10 +59,20 @@ export default async function EditProperty({ params, searchParams }: { params: P
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_24rem]">
         <div className="space-y-6">
-          <PropertyForm id={p.id} values={values} {...options} />
+          <PropertyForm id={p.id} values={values} {...options} canPublish={canPublish} />
         </div>
         <div className="space-y-6">
-          <Panel title="Quick actions">
+          {p.source === "OWNER" && (
+            <Panel title="Owner listing" description="Listed by its owner and approved by your team. The seller's details are private.">
+              <dl className="space-y-1 text-sm">
+                <div><dt className="inline text-slate">Seller: </dt><dd className="inline">{p.seller ? `${p.seller.name} · ${p.seller.email}${p.seller.phone ? ` · ${p.seller.phone}` : ""}` : "Account removed"}</dd></div>
+                {p.sellerRelation && <div><dt className="inline text-slate">Relationship: </dt><dd className="inline">{p.sellerRelation}</dd></div>}
+                {p.sellerAddress && <div><dt className="inline text-slate">Address: </dt><dd className="inline">{p.sellerAddress}</dd></div>}
+              </dl>
+              <Link href={`/admin/submissions/${p.id}`} className="mt-3 inline-block text-sm underline">Review history</Link>
+            </Panel>
+          )}
+          {canPublish && <Panel title="Quick actions">
             <p className="field-label">Mark as</p>
             <div className="flex flex-wrap gap-2">
               {(["AVAILABLE", "RESERVED", "SOLD", "UNAVAILABLE"] as const).map((a) => (
@@ -79,7 +92,7 @@ export default async function EditProperty({ params, searchParams }: { params: P
                 <ConfirmButton message="Delete this draft property permanently? Linked enquiries will be kept." className="text-sm text-terracotta-deep underline">Delete draft</ConfirmButton>
               </form>
             )}
-          </Panel>
+          </Panel>}
         </div>
       </div>
 

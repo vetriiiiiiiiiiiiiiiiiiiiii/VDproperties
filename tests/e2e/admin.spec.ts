@@ -85,23 +85,26 @@ test.describe.serial("property lifecycle", () => {
 });
 
 test.describe("role permissions are enforced on the server", () => {
-  test("enquiry manager can't manage properties or settings", async ({ page }) => {
+  test("staff prepare drafts but can't publish, export, or manage people and settings", async ({ page }) => {
     await login(page, "enquiry");
-    await expect(page.getByRole("link", { name: "Properties", exact: true })).toHaveCount(0);
-    await page.goto("/admin/properties");
-    await expect(page).toHaveURL(/\/admin\?denied=1/);
-    await page.goto("/admin/settings");
-    await expect(page).toHaveURL(/\/admin\?denied=1/);
-    const upload = await page.request.post("/api/admin/uploads", { multipart: { target: "property", id: "x", alt: "test" } });
-    expect(upload.status()).toBe(403);
+    await page.goto("/admin/properties/new");
+    await expect(page.getByRole("button", { name: "Save as draft" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /publish/i })).toHaveCount(0);
+    for (const path of ["/admin/settings", "/admin/users", "/admin/zones"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(/\/admin\?denied=1/);
+    }
+    expect((await page.request.get("/api/admin/leads/export?kind=enquiries")).status()).toBe(403);
   });
 
-  test("property manager can't read leads or export them", async ({ page }) => {
+  test("admins manage staff but can't change a Super Admin or company settings", async ({ page }) => {
     await login(page, "property");
-    await page.goto("/admin/enquiries");
+    await page.goto("/admin/users");
+    const superAdmin = page.locator("li", { hasText: "e2e-admin@vdproperties.test" });
+    await expect(superAdmin.getByText("Only a Super Admin can change this account.")).toBeVisible();
+    await expect(page.getByLabel("Role").first().locator("option", { hasText: "Super Admin" })).toHaveCount(0);
+    await page.goto("/admin/settings");
     await expect(page).toHaveURL(/\/admin\?denied=1/);
-    const res = await page.request.get("/api/admin/leads/export?kind=enquiries");
-    expect(res.status()).toBe(403);
   });
 
   test("anonymous requests to admin APIs are refused", async ({ request }) => {

@@ -7,17 +7,20 @@ import { requirePage } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime, phoneHref } from "@/lib/format";
 import { SITE_VISIT_STATUS_LABEL, TIME_SLOT_LABEL } from "@/lib/labels";
+import { requireInScopePage, assignableStaff } from "@/lib/zones";
 
 export const metadata = { title: "Site visit" };
 
 export default async function VisitDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requirePage("leads:manage");
+  const user = await requirePage("leads:manage");
+  const { id } = await params;
+  await requireInScopePage(user, "siteVisit", id);
   const v = await db.siteVisit.findUnique({
-    where: { id: (await params).id },
-    include: { property: { select: { id: true } }, project: { select: { id: true } }, notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } } },
+    where: { id },
+    include: { property: { select: { id: true, location: { select: { zoneId: true } } } }, project: { select: { id: true } }, notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } } },
   });
   if (!v) notFound();
-  const staff = await db.user.findMany({ where: { active: true, role: { in: ["SUPER_ADMIN", "ENQUIRY_MANAGER"] } }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const staff = await assignableStaff(v.property?.location?.zoneId);
   return (
     <>
       <PageHeader title={v.name} description={`Site visit · ${SITE_VISIT_STATUS_LABEL[v.status]} · ref ${v.id.slice(-8).toUpperCase()}`} back={{ href: "/admin/site-visits", label: "Site visits" }} />

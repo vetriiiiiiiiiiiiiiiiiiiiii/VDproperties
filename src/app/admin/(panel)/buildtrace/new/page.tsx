@@ -11,7 +11,7 @@ export default async function NewBuild() {
   const [customers, properties, managers] = await Promise.all([
     db.user.findMany({ where: { role: "CUSTOMER", active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
     db.property.findMany({ orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, title: true } }),
-    db.user.findMany({ where: { active: true, role: { in: ["PROJECT_MANAGER", "SUPER_ADMIN"] } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.user.findMany({ where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN", "STAFF"] } }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   return (
     <>

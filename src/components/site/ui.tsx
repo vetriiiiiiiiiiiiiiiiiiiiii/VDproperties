@@ -72,7 +72,7 @@ export function SampleTag({ className = "" }: { className?: string }) {
 export function PageIntro({ eyebrow, title, children, crumbs }: { eyebrow: string; title: string; children?: React.ReactNode; crumbs: { label: string; href?: string }[] }) {
   return (
     <section className="relative overflow-hidden">
-      <InkSun className="pointer-events-none absolute -top-2 right-4 hidden w-64 md:block lg:right-[6%] lg:w-72" />
+      {!children && <InkSun className="pointer-events-none absolute -top-2 right-4 hidden w-64 md:block lg:right-[6%] lg:w-72" />}
       <svg aria-hidden="true" viewBox="0 0 1440 60" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-10 w-full">
         <path fill="#8CBF26">
           <animate attributeName="d" dur="12s" repeatCount="indefinite" values="M0 40 C 360 6, 760 10, 1080 30 S 1380 46, 1440 26 L1440 60 L0 60 Z;M0 32 C 380 18, 720 2, 1060 22 S 1400 40, 1440 34 L1440 60 L0 60 Z;M0 40 C 360 6, 760 10, 1080 30 S 1380 46, 1440 26 L1440 60 L0 60 Z" />

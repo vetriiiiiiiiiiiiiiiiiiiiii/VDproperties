@@ -77,8 +77,32 @@ export const IMAGE_KIND_LABEL: Record<ImageKind, string> = {
 
 export const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
-  PROPERTY_MANAGER: "Property Manager",
-  ENQUIRY_MANAGER: "Enquiry Manager",
-  PROJECT_MANAGER: "Project Manager",
+  ADMIN: "Admin",
+  STAFF: "Staff",
+  ZONAL_OFFICER: "Zonal Officer",
   CUSTOMER: "Customer",
 };
+
+export const SUBMISSION_STATUS_LABEL: Record<"SUBMITTED" | "UNDER_REVIEW" | "CHANGES_REQUESTED" | "INSPECTED" | "APPROVED" | "REJECTED" | "WITHDRAWN", string> = {
+  SUBMITTED: "Submitted",
+  UNDER_REVIEW: "Under review",
+  CHANGES_REQUESTED: "Changes requested",
+  INSPECTED: "Inspected",
+  APPROVED: "Approved",
+  REJECTED: "Declined",
+  WITHDRAWN: "Withdrawn by seller",
+};
+
+export const PURCHASE_STATUS_LABEL: Record<"NEW" | "CONTACTED" | "APPOINTMENT_SCHEDULED" | "NEGOTIATING" | "BOOKED" | "COMPLETED" | "CLOSED", string> = {
+  NEW: "New",
+  CONTACTED: "Contacted",
+  APPOINTMENT_SCHEDULED: "Appointment confirmed",
+  NEGOTIATING: "Negotiating",
+  BOOKED: "Booked (token received)",
+  COMPLETED: "Sale completed",
+  CLOSED: "Closed (not proceeding)",
+};
+
+export const APPOINTMENT_MODE_LABEL: Record<"SITE_VISIT" | "OFFICE" | "VIDEO_CALL", string> = { SITE_VISIT: "Site visit", OFFICE: "Office meeting", VIDEO_CALL: "Video call" };
+export const FUNDING_LABEL: Record<"OWN_FUNDS" | "HOME_LOAN" | "BOTH" | "UNDECIDED", string> = { OWN_FUNDS: "Own funds", HOME_LOAN: "Home loan", BOTH: "Own funds and loan", UNDECIDED: "Undecided" };
+export const SELLER_RELATION_LABEL: Record<string, string> = { OWNER: "Owner", JOINT_OWNER: "Joint owner", POWER_OF_ATTORNEY: "Power of attorney holder", FAMILY_MEMBER: "Family member of the owner" };
