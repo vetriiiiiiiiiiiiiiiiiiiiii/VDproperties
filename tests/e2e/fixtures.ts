@@ -1,4 +1,7 @@
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { E2E_MAIL_DIR } from "../../playwright.config";
 
 // Test-only accounts created by global-setup in the e2e database.
 export const USERS = {
@@ -30,6 +33,20 @@ export async function login(page: Page, who: keyof typeof USERS) {
   await page.getByLabel("Password").fill(USERS[who].password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin$/);
+}
+
+/** Waits for the newest captured email to this address and returns the link it contains. */
+export async function linkFromEmail(to: string, contains: string) {
+  for (let i = 0; i < 40; i++) {
+    const files = await readdir(E2E_MAIL_DIR).catch(() => [] as string[]);
+    for (const f of files.sort().reverse()) {
+      const mail = JSON.parse(await readFile(path.join(E2E_MAIL_DIR, f), "utf8")) as { to: string; text: string };
+      const link = mail.text.match(/https?:\/\/\S+/g)?.find((u) => u.includes(contains));
+      if (mail.to === to && link) return new URL(link).pathname + new URL(link).search;
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`No email to ${to} with a link containing ${contains}`);
 }
 
 /** Public forms reject submissions made faster than a person could type. */

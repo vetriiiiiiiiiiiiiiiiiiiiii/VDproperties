@@ -5,6 +5,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { notifyCustomer } from "@/lib/notify";
 import { recordActivity } from "@/lib/platform";
 import { can } from "@/lib/rbac";
 import { assertInScope, isAssignable } from "@/lib/zones";
@@ -38,11 +39,21 @@ export async function updatePurchase(id: string, _prev: ActionResult | null, fd:
     if (input.status === "APPOINTMENT_SCHEDULED" && !input.scheduledFor) {
       return { ok: false, message: "Enter the confirmed appointment date and time.", errors: { scheduledFor: "Required to confirm the appointment" } };
     }
-    const before = await db.purchaseRequest.findUniqueOrThrow({ where: { id }, select: { status: true, propertyId: true, propertyLabel: true } });
+    const before = await db.purchaseRequest.findUniqueOrThrow({ where: { id }, select: { status: true, propertyId: true, propertyLabel: true, buyerId: true, scheduledFor: true, mode: true } });
     await db.purchaseRequest.update({
       where: { id },
       data: { status: input.status, assignedToId: input.assignedToId ?? null, scheduledFor: input.scheduledFor, appointmentNote: input.appointmentNote ?? null, followUpAt: input.followUpAt },
     });
+
+    const rescheduled = !!input.scheduledFor && input.scheduledFor.getTime() !== before.scheduledFor?.getTime();
+    if (input.status === "APPOINTMENT_SCHEDULED" && (before.status !== input.status || rescheduled)) {
+      await notifyCustomer(before.buyerId, "APPOINTMENT_CONFIRMED", "/account#purchases", (t, f) => ({
+        title: t.market.updates.appointment(before.propertyLabel),
+        body: t.market.updates.appointmentBody(t.market.buy.modes[before.mode], f.dateTime(input.scheduledFor!), input.appointmentNote ?? ""),
+      }));
+    } else if (before.status !== input.status && input.status !== "NEW") {
+      await notifyCustomer(before.buyerId, "PURCHASE_STATUS", "/account#purchases", (t) => ({ title: t.market.updates.purchaseStatus(before.propertyLabel, t.market.purchaseStatus[input.status]) }));
+    }
 
     let propertyNote = "";
     if (input.updateProperty && before.propertyId && (input.status === "BOOKED" || input.status === "COMPLETED")) {

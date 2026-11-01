@@ -27,3 +27,29 @@ export const TRANSLATABLE = {
   project: ["name", "summary", "description", "highlights", "approvalInfo", "localityLabel"],
   settings: ["tagline", "businessHours", "aboutIntro", "aboutApproach", "aboutValues", "aboutServiceArea", "aboutCustomers", "registrationInfo", "constructionNotes", "privacyPolicy", "termsConditions"],
 } as const;
+
+export type TranslatableModel = keyof typeof TRANSLATABLE;
+
+/** Settings lists, edited as text blocks and stored as arrays. */
+export const TRANSLATABLE_LISTS = ["constructionServices", "constructionStages", "strengths", "faqs"] as const;
+
+const LABELS: Record<string, string> = {
+  title: "Title", name: "Name", summary: "Summary", description: "Description", localityLabel: "Locality", priceNote: "Price note", accessRoad: "Access road",
+  developmentStatus: "Development status", utilities: "Utilities", constructionSpecs: "Construction specifications", approvalInfo: "Approvals & registration",
+  siteConstraints: "Known site constraints", highlights: "Highlights", tagline: "Tagline", businessHours: "Business hours", aboutIntro: "About: introduction",
+  aboutApproach: "About: approach", aboutValues: "About: values", aboutServiceArea: "About: service area", aboutCustomers: "About: customers",
+  registrationInfo: "Registration & credentials", constructionNotes: "Construction introduction", privacyPolicy: "Privacy policy", termsConditions: "Terms & conditions",
+};
+const SHORT = new Set(["title", "name", "localityLabel", "priceNote", "accessRoad", "developmentStatus", "tagline"]);
+
+/** Builds the admin form fields for a record's Tamil text from the record itself. */
+export function translationFields(model: TranslatableModel, row: Record<string, unknown> & { translations?: unknown }) {
+  const ta = ((row.translations as Translations | null)?.ta ?? {}) as Record<string, unknown>;
+  return TRANSLATABLE[model].map((name) => ({
+    name: name as string,
+    label: LABELS[name] ?? name,
+    english: row[name] === null || row[name] === undefined ? "" : String(row[name]),
+    value: typeof ta[name] === "string" ? (ta[name] as string) : "",
+    long: !SHORT.has(name),
+  }));
+}

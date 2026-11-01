@@ -3,7 +3,10 @@ import Link from "@/i18n/Link";
 import { getI18n } from "@/i18n/server";
 import { logoutCustomer } from "@/app/account/_actions/auth";
 import { deleteScenario, deleteSearch, toggleSearchAlerts } from "@/app/account/_actions/customer";
+import { markUpdatesRead } from "@/app/account/_actions/recovery";
 import { AlertConsentForm } from "@/components/account/AuthForms";
+import { VerifyBanner } from "@/components/account/RecoveryForms";
+import { needsEmailVerification } from "@/lib/account-links";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { Media } from "@/components/site/Media";
 import { AvailabilityBadge } from "@/components/site/ui";
@@ -27,6 +30,11 @@ export default async function AccountPage() {
     db.purchaseRequest.findMany({ where: { buyerId: me.id }, orderBy: { createdAt: "desc" }, take: 20, include: { property: { select: { slug: true, publication: true } } } }),
   ]);
   const mk = t.market;
+  const [updates, unverified, emailOnFile] = await Promise.all([
+    db.notification.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" }, take: 10 }),
+    needsEmailVerification(me.id),
+    db.user.findUniqueOrThrow({ where: { id: me.id }, select: { email: true } }),
+  ]);
   const [user, saved, scenarios, searches, enquiries, visits, projects] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: me.id }, select: { name: true, email: true, marketingConsent: true } }),
     db.savedProperty.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" }, include: { property: { include: { images: { take: 1, orderBy: { sortOrder: "asc" } }, location: true } } } }),
@@ -47,6 +55,29 @@ export default async function AccountPage() {
         </div>
         <form action={logoutCustomer} className="relative"><button className="btn btn-outline">{d.signOut}</button></form>
       </header>
+
+      {unverified && <div className="mt-6"><VerifyBanner email={emailOnFile.email} /></div>}
+
+      {updates.length > 0 && (
+        <section className="mt-10" aria-labelledby="up-h" id="updates">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="up-h" className="annot text-emerald">{mk.updates.title}</h2>
+            {updates.some((u) => !u.readAt) && <form action={markUpdatesRead}><button className="text-sm underline">{mk.updates.markRead}</button></form>}
+          </div>
+          <ul className="surface mt-4 divide-y divide-line text-sm">
+            {updates.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className={u.readAt ? "text-ink" : "font-semibold text-navy"}>{u.title}</p>
+                  {u.body && <p className="mt-0.5 whitespace-pre-line text-slate">{u.body}</p>}
+                  <p className="mt-0.5 text-xs text-slate">{f.dateTime(u.createdAt)}</p>
+                </div>
+                <Link href={u.path} className="shrink-0 underline">{mk.updates.open}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2" aria-label={`${mk.mine.title} · ${mk.purchases.title}`}>
         <div id="listings">

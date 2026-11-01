@@ -5,6 +5,7 @@ import { z } from "zod";
 import { DICTS } from "@/i18n/dict";
 import { getLocale, runLocalised } from "@/i18n/server";
 import { translateMessage } from "@/i18n/messages";
+import { needsEmailVerification } from "@/lib/account-links";
 import { audit } from "@/lib/audit";
 import { clientIp, requireCustomer } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -37,6 +38,7 @@ export async function requestPurchase(propertyId: string, _prev: ActionResult | 
   return runLocalised(async () => {
     const me = await requireCustomer();
     if (!rateLimit(`purchase:${await clientIp()}`, 8, 60 * 60 * 1000).ok) return { ok: false, message: DICTS[locale].market.msg.tooMany };
+    if (await needsEmailVerification(me.id)) return { ok: false, message: DICTS[locale].market.auth.required };
     const raw = formObject(fd);
     const input = purchaseSchema.parse({ ...raw, consent: raw.consent === "on" || raw.consent === "true" });
     const p = await db.property.findFirst({

@@ -14,6 +14,7 @@ import { deleteStored } from "@/lib/storage";
 import { alertSavedSearches } from "@/lib/alerts";
 import { formatPrice } from "@/lib/format";
 import { recordActivity } from "@/lib/platform";
+import { notifyCustomer } from "@/lib/notify";
 import { nextReferenceCode, uniquePropertySlug as uniqueSlug } from "@/lib/listings";
 import { checkbox, formObject, nullify, optHttpsUrl, optId, optInt, optLongText, optNum, optStr, runAction, type ActionResult } from "@/lib/admin";
 
@@ -135,6 +136,9 @@ export async function saveProperty(id: string | null, _prev: ActionResult | null
     if (existing && existing.availability !== saved.availability) await recordActivity(saved.id, "AVAILABILITY", `Availability changed to ${saved.availability.toLowerCase()}`);
     if (existing && existing.publication === "PUBLISHED" && publication === "DRAFT") await recordActivity(saved.id, "UNPUBLISHED", "Listing withdrawn from the website", false);
     if (publication === "PUBLISHED" && !existing?.publishedAt) await alertSavedSearches(saved.id);
+    if (publication === "PUBLISHED" && existing?.publication !== "PUBLISHED" && saved.source === "OWNER") {
+      await notifyCustomer(saved.sellerId, "LISTING_LIVE", `/account/listings/${saved.id}`, (t) => ({ title: t.market.updates.listingLive(saved.referenceCode), body: t.market.detail.liveNote }));
+    }
     revalidatePath("/", "layout");
 
     if (!id) redirect(`/admin/properties/${saved.id}?created=1`);

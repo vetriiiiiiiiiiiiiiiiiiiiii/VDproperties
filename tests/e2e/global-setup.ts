@@ -1,10 +1,12 @@
 import { execSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { E2E_DB } from "../../playwright.config";
+import { rm } from "node:fs/promises";
+import { E2E_DB, E2E_MAIL_DIR } from "../../playwright.config";
 import { USERS } from "./fixtures";
 
 export default async function globalSetup() {
+  await rm(E2E_MAIL_DIR, { recursive: true, force: true });
   const env = { ...process.env, DATABASE_URL: E2E_DB };
   execSync("npx prisma migrate deploy", { env, stdio: "inherit" });
   const db = new PrismaClient({ datasources: { db: { url: E2E_DB } } });

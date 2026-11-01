@@ -6,6 +6,8 @@ import { ImageManager } from "@/components/admin/ImageManager";
 import { Panel } from "@/components/admin/kit";
 import { Notice, PageHeader } from "@/components/admin/PageHeader";
 import { ProjectForm } from "@/components/admin/ProjectForm";
+import { TranslationsPanel } from "@/components/admin/TranslationsPanel";
+import { translationFields } from "@/lib/translations";
 import { requirePage } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -35,6 +37,9 @@ export default async function EditProject({ params, searchParams }: { params: Pr
         values={{ name: p.name, slug: p.slug, status: p.status, publication: p.publication, summary: s(p.summary), description: s(p.description), locationId: s(p.locationId), localityLabel: s(p.localityLabel), highlights: s(p.highlights), approvalInfo: s(p.approvalInfo), seoTitle: s(p.seoTitle), seoDescription: s(p.seoDescription), isSample: p.isSample }}
       />
       <div className="mt-6 space-y-6">
+        <Panel title="Tamil version" description="Shown on the Tamil site. Anything left blank shows in English.">
+          <TranslationsPanel model="project" id={p.id} fields={translationFields("project", p)} />
+        </Panel>
         <Panel title="Images">
           <ImageManager target="project" ownerId={p.id} images={p.images.map((i) => ({ id: i.id, url: i.url, alt: i.alt }))} />
         </Panel>

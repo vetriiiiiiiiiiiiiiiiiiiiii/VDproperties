@@ -8,14 +8,20 @@ import { audit } from "@/lib/audit";
 import { requirePermission, type SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { logSubmission } from "@/lib/listings";
+import { notifyCustomer } from "@/lib/notify";
 import { assertInScope } from "@/lib/zones";
 import { formObject, runAction, type ActionResult } from "@/lib/admin";
 
 const OPEN: SubmissionStatus[] = ["SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED", "INSPECTED"];
 
+/** Tells the seller their listing's status changed, with the team's message. */
+function tellSeller(p: { id: string; referenceCode: string; sellerId: string | null }, status: SubmissionStatus, message?: string | null) {
+  return notifyCustomer(p.sellerId, "LISTING_STATUS", `/account/listings/${p.id}`, (t) => ({ title: t.market.updates.listingStatus(p.referenceCode, t.market.status[status]), body: message }));
+}
+
 async function load(user: SessionUser, id: string) {
   await assertInScope(user, "property", id);
-  const p = await db.property.findFirst({ where: { id, source: "OWNER" }, select: { id: true, referenceCode: true, title: true, submissionStatus: true, locationId: true } });
+  const p = await db.property.findFirst({ where: { id, source: "OWNER" }, select: { id: true, referenceCode: true, title: true, submissionStatus: true, locationId: true, sellerId: true } });
   if (!p || !p.submissionStatus) throw new Error("Submission not found");
   return p;
 }
@@ -59,6 +65,9 @@ export async function reviewSubmission(id: string, _prev: ActionResult | null, f
       if (msg.length < 2) return { ok: false, message: "Write a note first.", errors: { message: "Write a note" } };
       await logSubmission(id, { actorId: user.id, message: msg, visibleToSeller: false });
     }
+    if (input.step === "start") await tellSeller(p, "UNDER_REVIEW", input.message);
+    if (input.step === "changes") await tellSeller(p, "CHANGES_REQUESTED", input.message);
+    if (input.step === "inspected") await tellSeller(p, "INSPECTED", input.message);
     await audit({ actorId: user.id, action: `submission.${input.step}`, entityType: "Property", entityId: id, summary: `${p.referenceCode}: ${input.step}` });
     refresh(id);
     return { ok: true, message: input.step === "note" ? "Note added." : "Submission updated." };
@@ -84,6 +93,7 @@ export async function decideSubmission(id: string, _prev: ActionResult | null, f
       if (msg.length < 10) return { ok: false, message: "Explain to the seller why it wasn't accepted.", errors: { message: "Explain why it wasn't accepted" } };
       await db.property.update({ where: { id }, data: { submissionStatus: "REJECTED", publication: "DRAFT" } });
       await logSubmission(id, { actorId: user.id, status: "REJECTED", message: msg });
+      await tellSeller(p, "REJECTED", msg);
       await audit({ actorId: user.id, action: "submission.rejected", entityType: "Property", entityId: id, summary: p.referenceCode });
       refresh(id);
       return { ok: true, message: "Submission declined. The seller can see your message." };
@@ -94,6 +104,7 @@ export async function decideSubmission(id: string, _prev: ActionResult | null, f
     }
     await db.property.update({ where: { id }, data: { submissionStatus: "APPROVED", locationId } });
     await logSubmission(id, { actorId: user.id, status: "APPROVED", message: input.message ?? "Approved. We're preparing your listing to publish." });
+    await tellSeller(p, "APPROVED", input.message);
     await audit({ actorId: user.id, action: "submission.approved", entityType: "Property", entityId: id, summary: p.referenceCode });
     refresh(id);
     approved = true;

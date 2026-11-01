@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { clientIp, createSession, destroySession, getCurrentUser, hashPassword, LOCKOUT_MS, MAX_FAILED_LOGINS, verifyPassword } from "@/lib/auth";
+import { sendVerificationLink } from "@/lib/account-links";
 import { db } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { loginSchema, nameField, passwordPolicy, phoneField } from "@/lib/validation";
@@ -38,9 +39,10 @@ export async function registerCustomer(_prev: ActionResult | null, fd: FormData)
       return { ok: false, message: m.exists, errors: { email: m.already } };
     }
     const user = await db.user.create({
-      data: { name: input.name, email: input.email, phone: input.phone, role: "CUSTOMER", passwordHash: await hashPassword(input.password), marketingConsent: input.marketing === "on" },
+      data: { name: input.name, email: input.email, phone: input.phone, role: "CUSTOMER", passwordHash: await hashPassword(input.password), marketingConsent: input.marketing === "on", locale: await getLocale() },
     });
     await createSession(user.id);
+    await sendVerificationLink(user);
     await audit({ actorId: user.id, action: "customer.registered", entityType: "User", entityId: user.id, summary: "Customer account created", ipAddress: ip });
     return { ok: true, message: "Account created", redirectTo: await safeNext(fd.get("next")) };
   });
@@ -63,7 +65,7 @@ export async function loginCustomer(_prev: ActionResult | null, fd: FormData): P
     await db.user.update({ where: { id: user.id }, data: { failedLogins: failed, lockedUntil: failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCKOUT_MS) : null } });
     return { ok: false, message: m.wrong };
   }
-  await db.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
+  await db.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date(), locale: await getLocale() } });
   await createSession(user.id);
   redirect(await safeNext(fd.get("next")));
 }

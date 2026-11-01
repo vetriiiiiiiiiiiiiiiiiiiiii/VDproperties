@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
+import { notifyCustomer } from "@/lib/notify";
 import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formObject, optId, runAction, type ActionResult } from "@/lib/admin";
@@ -60,8 +61,12 @@ export async function updateSiteVisit(id: string, _prev: ActionResult | null, fd
     if (input.status === "SCHEDULED" && !input.scheduledFor) {
       return { ok: false, message: "Enter the confirmed date and time before marking the visit as scheduled.", errors: { scheduledFor: "Required for scheduled visits" } };
     }
-    const before = await db.siteVisit.findUniqueOrThrow({ where: { id }, select: { status: true } });
+    const before = await db.siteVisit.findUniqueOrThrow({ where: { id }, select: { status: true, customerId: true, subjectLabel: true, scheduledFor: true } });
     await db.siteVisit.update({ where: { id }, data: { ...input, assignedToId: input.assignedToId ?? null } });
+    if (input.status === "SCHEDULED" && input.scheduledFor && (before.status !== "SCHEDULED" || input.scheduledFor.getTime() !== before.scheduledFor?.getTime())) {
+      const when = input.scheduledFor;
+      await notifyCustomer(before.customerId, "VISIT_CONFIRMED", "/account", (t, f) => ({ title: t.market.updates.visit(before.subjectLabel), body: f.dateTime(when) }));
+    }
     await audit({ actorId: user.id, action: "site_visit.updated", entityType: "SiteVisit", entityId: id, summary: `Status ${before.status} → ${input.status}` });
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Site visit updated." };

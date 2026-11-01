@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { RegisterForm } from "@/components/account/AuthForms";
 import { getI18n } from "@/i18n/server";
+import { GoogleSignIn } from "@/components/account/GoogleSignIn";
+import { isGoogleConfigured } from "@/lib/google-auth";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +24,7 @@ export default async function Register({ searchParams }: { searchParams: Promise
         <h1 className="mt-4 text-headline text-navy">{a.registerTitle}</h1>
         <p className="mt-3 max-w-md text-slate">{a.registerIntro}</p>
       </div>
-      <div className="glass max-w-md rounded-[1rem] p-6 sm:p-8"><RegisterForm next={next} /></div>
+      <div className="glass max-w-md rounded-[1rem] p-6 sm:p-8">{isGoogleConfigured() && <GoogleSignIn next={next} />}<RegisterForm next={next} /></div>
     </div>
   );
 }

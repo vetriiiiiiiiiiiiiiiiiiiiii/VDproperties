@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { VerifyBanner } from "@/components/account/RecoveryForms";
 import { SellerListingForm, type SellerValues } from "@/components/account/SellerForms";
+import { needsEmailVerification } from "@/lib/account-links";
 import { Breadcrumbs } from "@/components/site/ui";
 import { getI18n } from "@/i18n/server";
 import { requireCustomerPage } from "@/lib/auth";
@@ -15,6 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewListing() {
   const me = await requireCustomerPage("/account/listings/new");
   const { t } = await getI18n();
+  const unverified = await needsEmailVerification(me.id);
   const [user, locations] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: me.id }, select: { name: true, phone: true } }),
     db.location.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, city: true } }),
@@ -27,6 +30,7 @@ export default async function NewListing() {
       <Breadcrumbs items={[{ label: t.account.dash.eyebrow, href: "/account" }, { label: t.market.mine.title, href: "/account/listings" }, { label: t.market.form.newTitle }]} />
       <h1 className="mt-6 text-headline text-navy">{t.market.form.newTitle}</h1>
       <p className="mt-2 max-w-2xl text-slate">{t.market.form.newIntro}</p>
+      {unverified && <div className="mt-6"><VerifyBanner email={me.email} /></div>}
       <div className="mt-8">
         <SellerListingForm
           values={{ ...empty, name: user.name, phone: user.phone ?? "" }}

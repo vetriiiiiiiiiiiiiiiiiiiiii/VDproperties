@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { localePath } from "@/i18n/config";
 import { DICTS } from "@/i18n/dict";
 import { getLocale, runLocalised } from "@/i18n/server";
+import { needsEmailVerification } from "@/lib/account-links";
 import { audit } from "@/lib/audit";
 import { clientIp, requireCustomer } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -77,6 +78,7 @@ export async function createListing(_prev: ActionResult | null, fd: FormData): P
   const result = await runLocalised(async () => {
     const me = await requireCustomer();
     if (!rateLimit(`listing:${await clientIp()}`, 10, 60 * 60 * 1000).ok) return { ok: false, message: m.tooMany };
+    if (await needsEmailVerification(me.id)) return { ok: false, message: DICTS[locale].market.auth.required };
     const open = await db.property.count({ where: { sellerId: me.id, submissionStatus: { in: SELLER_OPEN } } });
     if (open >= MAX_OPEN_SUBMISSIONS) return { ok: false, message: m.limit(MAX_OPEN_SUBMISSIONS) };
     const input = parse(fd);

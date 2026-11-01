@@ -18,6 +18,7 @@ export function LoginForm() {
         <input id="password" name="password" type="password" autoComplete="current-password" required className="field" />
       </div>
       <Submit className="w-full">Sign in</Submit>
+      <p className="text-sm"><a href="/account/forgot" className="underline">Forgot your password?</a></p>
     </form>
   );
 }

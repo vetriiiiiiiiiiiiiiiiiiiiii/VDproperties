@@ -64,7 +64,7 @@ A real-estate platform for V D Properties: a public website for residential plot
 - **Zod** schemas for validation on both client and server
 - **sharp** for image processing; local disk or any S3-compatible bucket for storage
 - **bcrypt** password hashing; server-side sessions stored hashed in the database
-- **Nodemailer** for optional staff notifications over SMTP
+- **Resend** (HTTP API) for transactional email
 - **Vitest** (unit) and **Playwright** (end-to-end) tests
 
 Fonts: Newsreader (editorial serif), Manrope (sans) and IBM Plex Mono (technical annotations), plus Noto Serif Tamil and Catamaran for Tamil, all self-hosted at build time via `next/font`. Tamil fonts are only downloaded when Tamil text is on the page.
@@ -151,7 +151,8 @@ Every variable is documented in [`.env.example`](.env.example). Secrets never be
 | `STORAGE_DRIVER` | | `local` (default) or `s3` |
 | `UPLOAD_DIR` | | Local upload folder (default `./uploads`). Use a persistent volume in production. |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_URL` | if `s3` | S3-compatible storage (AWS S3, Cloudflare R2, DigitalOcean Spaces). Public images go under `public/`, private documents under `private/`, so the bucket policy should only expose `public/*`. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Optional staff notifications. Leave `SMTP_HOST` empty to disable. |
+| `RESEND_API_KEY`, `MAIL_FROM` | | Email through [Resend](https://resend.com): password resets, email confirmation, customer updates and staff notifications. `MAIL_FROM` must be on a domain verified in Resend. Leave empty to disable. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | "Continue with Google" for customers. Authorised redirect URI: `<NEXT_PUBLIC_SITE_URL>/api/auth/google/callback`. Leave empty to hide the button. |
 | `LEAD_NOTIFICATION_EMAILS` | | Comma-separated staff addresses notified of new leads. Emails contain a dashboard link, not customer details. |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | seed only | First Super Admin, created by `npm run db:seed` (password: 12+ characters) |
 | `SEED_SAMPLE_CONTENT` | seed only | `"true"` adds labelled sample listings for development |
@@ -188,6 +189,14 @@ Data model highlights:
 The first Super Admin is created by the seed. Add others in **Admin → Team & roles**: Super Admins can give any staff role; Admins can only add or change Staff and Zonal Officers. There must always be at least one active Super Admin; role changes, deactivation and password resets sign the affected person out everywhere. Upgrading from the earlier roles, the `roles_zones_owner_listings_purchases` migration turns Property, Enquiry and Project Managers into Staff.
 
 **Zones** (Admin → Zones) group locations. A zonal officer covers one or more zones (set on their team entry) and sees only records whose property or project is in those locations; anything outside them, or with no catalogue location, stays with the office team. Every admin list, detail page, count and action checks this on the server.
+
+## Accounts, email and updates
+
+- **Google sign-in** (customers only): "Continue with Google" appears on the sign-in and registration pages once `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. It uses the authorization-code flow with PKCE, state and nonce; Google's verified email links to an existing customer account or creates one. If an existing account's email was never confirmed, its old password and sessions are cancelled when Google proves ownership. Staff accounts are refused and keep password sign-in, so a Google account can't open the admin.
+- **Password reset** (`/account/forgot`, for customers and staff): sends a link that works once and expires in an hour. The form answers the same whether or not the email exists, a reset signs the person out everywhere, and only a SHA-256 hash of each token is stored (`AuthToken` table).
+- **Email confirmation**: new customers get a link that expires in 3 days and needs a button press, so mail scanners can't confirm it. Listing a property or sending a purchase request requires a confirmed email once email is configured. Accounts that existed before this feature count as confirmed.
+- **Updates** (`Notification` table): sellers hear about review steps and going live; buyers hear about status changes and confirmed appointments; site visitors with accounts hear when a visit is confirmed. Updates always appear in the account, are emailed in the customer's language when email is configured, and never block the staff action.
+- **Tamil content**: properties, projects and Company settings each have a *Tamil version* panel in the admin. Blank fields show English on Tamil pages.
 
 ## Selling and buying
 
@@ -229,7 +238,23 @@ Any Node.js host with PostgreSQL works. The general steps:
 
 **Vercel**: set the env vars, use `npm run build` as the build command, and run `npm run db:deploy` as part of the build or release step. Use `STORAGE_DRIVER="s3"`, because the filesystem is ephemeral.
 
-**Single VM / Docker**: run behind Nginx or Caddy for TLS, mount `UPLOAD_DIR` on a persistent volume, and set `X-Forwarded-For` at the proxy so rate limiting sees real client IPs.
+**Single VM**: run behind Nginx or Caddy for TLS (sign-in cookies need HTTPS in production), keep `UPLOAD_DIR` on a persistent disk, and set `X-Forwarded-For` at the proxy so rate limiting sees real client IPs.
+
+**Health check**: `GET /api/health` returns 200 when the app can reach PostgreSQL, 503 otherwise.
+
+**Backups**: `DATABASE_URL=… npm run db:backup` writes a `pg_dump` file to `backups/`. Schedule it daily, copy files off the server, back up the uploads volume or bucket too, and test a restore.
+
+### Launch checklist
+
+1. Domain, HTTPS and hosting; `NEXT_PUBLIC_SITE_URL` set to the real address.
+2. Managed or backed-up PostgreSQL; `npm run db:deploy` on every release.
+3. Email: verify your domain in [Resend](https://resend.com) (add its DNS records), then set `RESEND_API_KEY`, `MAIL_FROM` (an address on that domain) and `LEAD_NOTIFICATION_EMAILS`. Send yourself a password reset to confirm delivery.
+   Google sign-in: in Google Cloud Console create an OAuth client (type Web application), add `<site URL>/api/auth/google/callback` as an authorised redirect URI, publish the consent screen, and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Photo storage: an S3-compatible bucket, or a persistent disk on one server.
+5. A commercial map provider in `NEXT_PUBLIC_MAP_TILE_URL`.
+6. Business details in Settings; sample listings deleted; `SEED_SAMPLE_CONTENT="false"`.
+7. Locations, zones and team accounts created.
+8. Legal review of the privacy policy, terms and seller declaration; native-speaker review of Tamil text.
 
 ## Testing
 
@@ -290,8 +315,8 @@ tests/unit, tests/e2e  Vitest and Playwright suites
 - **Listing images are sample illustrations** (architectural line drawings, labelled "Sample illustration · not a photo") until the company uploads its own photographs. The brand graphics (hero, explorer, skyline) are permanent design elements, not stand-ins for photos.
 - **Maps**: Leaflet with OpenStreetMap tiles by default. OSM's tile policy suits low traffic only, so configure `NEXT_PUBLIC_MAP_TILE_URL` with a commercial provider in production. The satellite layer appears only when a provider is configured. Pins and boundaries appear only for properties whose exact location is authorised.
 - **Property Studio** produces conceptual layouts, not architectural drawings. Setbacks and coverage are checked only against recorded or customer-entered values; local building rules aren't built in. There's no 3D viewer; the isometric massing is an exact projection of the generated footprint.
-- **New-listing alerts** are emailed only when SMTP is configured and the customer has opted in. There's no email verification for customer accounts yet.
-- **Customer password reset** isn't self-service yet (it needs a configured email provider). Staff can't reset customer passwords from the admin.
-- **Dependency advisory**: Prisma 6's CLI config loader depends on `deepmerge-ts` < 8 (a stack-exhaustion advisory). It only runs on trusted local config, never on request input; upgrading to Prisma 7 resolves it.
+- **Email needs Resend.** Without `RESEND_API_KEY` and `MAIL_FROM`, password reset can't deliver its link, email confirmation isn't enforced, and customer updates appear only in their account. In development, emails are printed to the server log instead.
+- **Notifications are email and in-account only.** WhatsApp would need a WhatsApp Business provider.
+- **`deepmerge-ts` is overridden to v8** in `package.json` to clear a Prisma 6 CLI advisory. Remove the override when moving to Prisma 7.
 - **No route-level `loading.tsx` on listing pages.** In Next.js 15.5 production builds, a segment loading boundary stalled same-page search-parameter navigations (filters, chips, sorting), so the filter and sort controls show their own "Updating…" state instead. The e2e suite covers this.
 - Lighthouse and Core Web Vitals should be measured on the production deployment with real photographs, because image weight dominates those scores.

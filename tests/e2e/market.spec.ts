@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import sharp from "sharp";
 import { E2E_DB } from "../../playwright.config";
-import { login, waitLikeAPerson } from "./fixtures";
+import { linkFromEmail, login, waitLikeAPerson } from "./fixtures";
 
 /**
  * Owners list property for sale → staff review and ask for changes → the owner updates → an admin
@@ -27,6 +27,9 @@ test.describe.serial("selling, buying and appointments", () => {
     await page.locator('input[name="terms"]').check();
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL(/\/account$/);
+    await page.goto(await linkFromEmail(c.email, "/account/verify"));
+    await page.getByRole("button", { name: "Confirm my email" }).click();
+    await expect(page.getByRole("status")).toContainText("Your email is confirmed");
   }
 
   test("an owner submits a property with a photo", async ({ page }) => {
@@ -79,7 +82,7 @@ test.describe.serial("selling, buying and appointments", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/account$/);
     await page.goto(`/account/listings/${listingId}`);
-    await expect(page.getByText("Please add the survey number and a photo of the road.")).toBeVisible();
+    await expect(page.locator("aside").getByText("Please add the survey number and a photo of the road.")).toBeVisible();
     await page.locator('[name="approvalInfo"]').fill("Patta available. Survey no. 123/4.");
     await page.locator('[name="declaration"]').check();
     await page.getByRole("button", { name: "Save and send back for review" }).click();
@@ -154,6 +157,9 @@ test.describe.serial("selling, buying and appointments", () => {
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.locator("#purchases")).toContainText("Appointment confirmed");
     await expect(page.locator("#purchases")).toContainText("Meet at the plot entrance");
+    // The confirmation reached them as an update and by email.
+    await expect(page.locator("#updates")).toContainText("Appointment confirmed");
+    expect(await linkFromEmail(buyer.email, "/account")).toContain("/account");
   });
 
   test("zonal officers only see their zones", async ({ page }) => {

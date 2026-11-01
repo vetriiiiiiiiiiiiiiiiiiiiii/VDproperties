@@ -3,7 +3,14 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 import { SiteImageSlot } from "@/components/admin/SiteImageSlot";
 import { requirePage } from "@/lib/auth";
-import { getSettings } from "@/lib/settings";
+import { getSettings, type FaqItem, type TitledItem } from "@/lib/settings";
+import { TranslationsPanel } from "@/components/admin/TranslationsPanel";
+import { translationFields } from "@/lib/translations";
+
+function taList<T>(translations: unknown, key: string): T[] {
+  const v = (translations as { ta?: Record<string, unknown> } | null)?.ta?.[key];
+  return Array.isArray(v) ? (v as T[]) : [];
+}
 import { formatFaqs, formatSocialLinks, formatTitledBlocks } from "@/lib/settings-format";
 
 export const metadata = { title: "Company settings" };
@@ -35,6 +42,23 @@ export default async function SettingsPage() {
             strengths: formatTitledBlocks(s.strengths), faqs: formatFaqs(s.faqs), visitBlackoutDates: s.visitBlackoutDates.join("\n"), visitClosedWeekdays: s.visitClosedWeekdays,
           }}
         />
+        <Panel title="Tamil version" description="Shown on the Tamil site. Anything left blank shows in English. Lists use one block per item: first line is the title or question, then the text, with a blank line between items.">
+          <TranslationsPanel
+            model="settings"
+            id="1"
+            fields={[
+              ...translationFields("settings", s),
+              ...(
+                [
+                  ["constructionServices", "Construction services", formatTitledBlocks(s.constructionServices), formatTitledBlocks(taList<TitledItem>(s.translations, "constructionServices"))],
+                  ["constructionStages", "Construction stages", formatTitledBlocks(s.constructionStages), formatTitledBlocks(taList<TitledItem>(s.translations, "constructionStages"))],
+                  ["strengths", "Why choose us", formatTitledBlocks(s.strengths), formatTitledBlocks(taList<TitledItem>(s.translations, "strengths"))],
+                  ["faqs", "FAQs", formatFaqs(s.faqs), formatFaqs(taList<FaqItem>(s.translations, "faqs"))],
+                ] as const
+              ).map(([name, label, english, value]) => ({ name, label, english, value, long: true })),
+            ]}
+          />
+        </Panel>
       </div>
     </>
   );

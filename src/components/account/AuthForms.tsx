@@ -17,6 +17,7 @@ export function CustomerLoginForm({ next }: { next: string }) {
       <Field label={a.email} name="email" type="email" autoComplete="username" required />
       <Field label={a.password} name="password" type="password" autoComplete="current-password" required />
       <Submit className="w-full">{a.signIn}</Submit>
+      <p className="text-sm"><Link href="/account/forgot" className="underline">{t.market.auth.forgot}</Link></p>
       <p className="text-sm text-slate">{a.newHere} <Link href={`/account/register?next=${encodeURIComponent(next)}`} className="underline">{a.createLink}</Link></p>
     </form>
   );

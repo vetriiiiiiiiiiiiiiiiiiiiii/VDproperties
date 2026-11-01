@@ -10,6 +10,8 @@ import { ImageManager } from "@/components/admin/ImageManager";
 import { Panel } from "@/components/admin/kit";
 import { Notice, PageHeader } from "@/components/admin/PageHeader";
 import { PropertyForm, type PropertyFormValues } from "@/components/admin/PropertyForm";
+import { TranslationsPanel } from "@/components/admin/TranslationsPanel";
+import { translationFields } from "@/lib/translations";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { db } from "@/lib/db";
@@ -97,6 +99,9 @@ export default async function EditProperty({ params, searchParams }: { params: P
       </div>
 
       <div className="mt-6 space-y-6">
+        <Panel title="Tamil version" description="Shown on the Tamil site. Anything left blank shows in English.">
+          <TranslationsPanel model="property" id={p.id} fields={translationFields("property", p)} />
+        </Panel>
         <Panel title="Photographs & plans" description="The first photo is the cover image. Only publish images you have permission to use.">
           <ImageManager target="property" ownerId={p.id} images={p.images.map((i) => ({ id: i.id, url: i.url, alt: i.alt, kind: i.kind }))} />
         </Panel>

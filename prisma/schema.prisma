@@ -212,6 +212,14 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   phone              String?
+  /// Set once the customer confirms their email. Staff accounts don't need it.
+  emailVerifiedAt    DateTime?
+  /// Google account subject ("sub"), set when a customer signs in with Google.
+  googleId           String?            @unique
+  /// Language for emails: "en" or "ta".
+  locale             String             @default("en")
+  authTokens         AuthToken[]
+  notifications      Notification[]
   /// Customer consent to receive new-listing alerts. Separate from enquiry consent.
   marketingConsent   Boolean            @default(false)
   sessions           Session[]
@@ -239,6 +247,50 @@ model User {
 }
 
 /// Server-side sessions. Only a SHA-256 hash of the cookie token is stored.
+enum AuthTokenKind {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+/// One-time link tokens. Only a SHA-256 hash is stored, so a database leak can't be used to take over accounts.
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AuthTokenKind
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, kind])
+}
+
+enum NotificationKind {
+  LISTING_STATUS
+  LISTING_LIVE
+  PURCHASE_STATUS
+  APPOINTMENT_CONFIRMED
+  VISIT_CONFIRMED
+}
+
+/// An update for a customer. Always shown in their account; also emailed when email is configured.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      NotificationKind
+  title     String
+  body      String?
+  /// Internal path without a language prefix, e.g. /account/listings/abc.
+  path      String
+  readAt    DateTime?
+  emailedAt DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
 model Session {
   id        String   @id
   userId    String
