@@ -222,6 +222,28 @@ The website never invents facts. Until real information is entered, sections hid
 
 ## Deployment
 
+### Render (recommended)
+
+`render.yaml` sets up everything on [Render](https://render.com) in the Singapore region, the closest to India: the website, a PostgreSQL database, and a 5 GB disk for uploaded photos and documents. Migrations run automatically before each release, and every push to `main` deploys.
+
+1. **Create the services.** Sign in to Render with GitHub, choose **New → Blueprint**, and pick this repository. When asked, fill in:
+   - `NEXT_PUBLIC_SITE_URL`: leave it blank for now if the domain isn't ready. You'll set it in step 3.
+   - `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`: the first Super Admin (password 12+ characters).
+   - The Resend, Google and map keys: leave them blank if you don't have them yet. The site works without them.
+2. **Create the first admin.** Once the first deploy is live, open the web service's **Shell** tab and run `npm run db:seed`. Then delete `SEED_ADMIN_PASSWORD` under **Environment**.
+3. **Connect your domain.** Under **Settings → Custom Domains**, add the domain and create the DNS records Render shows. Render issues the HTTPS certificate. Set `NEXT_PUBLIC_SITE_URL` to `https://your-domain` and redeploy, because that address is built into the pages.
+4. **Turn on email and Google sign-in** whenever you're ready, by adding the keys under **Environment** (see the launch checklist below). Use the real domain in the Google redirect URI.
+5. **At launch**, after the real content is in and the sample listings are deleted, set `ALLOW_INDEXING` to `true` so search engines can list the site. It starts as `false`.
+
+Notes:
+- **Paid plans:** the disk and the automatic migrations need a paid web service, so the Blueprint uses the smallest paid instance (`0.5c-512mb`) and database (`0.1c-256mb`). Check current prices on Render before creating them. Render's free database is deleted after 30 days, so don't use it for the real site.
+- **Memory:** if large photo uploads fail with out-of-memory errors in the logs, change `plan` to `1c-2g`.
+- **Disk behaviour:** a service with a disk runs as a single instance and goes offline for a few seconds on each deploy. Render snapshots the disk daily and keeps snapshots for 7 days. To run several instances later, move uploads to a bucket (`STORAGE_DRIVER="s3"`).
+- **Backups:** check the database's backup and recovery options in Render for your plan, and run `npm run db:backup` against it occasionally to keep a copy of your own.
+- **Not tried live yet:** the Blueprint was written against Render's documentation, and the production build was tested locally with the same commands. Visitor IP addresses for rate limiting come from the `X-Forwarded-For` header, which wasn't confirmed in Render's documentation. After launch, check that sign-in audit entries show real IP addresses.
+
+### Other hosts
+
 Any Node.js host with PostgreSQL works. The general steps:
 
 1. Provision managed PostgreSQL (Neon, Supabase, RDS, DigitalOcean…) and set `DATABASE_URL`.
@@ -232,7 +254,7 @@ Any Node.js host with PostgreSQL works. The general steps:
    npm ci
    npm run db:deploy
    npm run build
-   npm run start            # serves on port 3000; put HTTPS (a reverse proxy or platform TLS) in front
+   npm run start            # serves on $PORT (default 3000); put HTTPS (a reverse proxy or platform TLS) in front
    ```
 5. Seed once to create the first Super Admin: `SEED_ADMIN_EMAIL=… SEED_ADMIN_PASSWORD=… npm run db:seed`. Then remove `SEED_ADMIN_PASSWORD` from the environment.
 

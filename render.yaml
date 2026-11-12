@@ -1,0 +1,62 @@
+# Render Blueprint: the website, its PostgreSQL database and a disk for uploaded photos and documents.
+# In Render: New → Blueprint → pick this repository. You'll be asked for the values marked sync: false.
+services:
+  - type: web
+    name: vd-properties
+    runtime: node
+    region: singapore
+    # 512 MB of memory. Move up to 1c-2g if large photo uploads run out of memory.
+    plan: 0.5c-512mb
+    buildCommand: npm ci --include=dev && npm run build
+    # Applies new database migrations before each release goes live.
+    preDeployCommand: npm run db:deploy
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    # Photos and documents live here. A service with a disk runs as one instance and restarts briefly on each deploy.
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vd-properties-db
+          property: connectionString
+      - key: STORAGE_DRIVER
+        value: local
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      # The site's public address, e.g. https://vdproperties.in (no trailing slash). Redeploy after changing it.
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      # Keeps search engines out until launch. Set to "true" when the real content is in.
+      - key: ALLOW_INDEXING
+        value: "false"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: LEAD_NOTIFICATION_EMAILS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_MAP_TILE_URL
+        sync: false
+      - key: NEXT_PUBLIC_MAP_ATTRIBUTION
+        sync: false
+      # Used once to create the first Super Admin, then delete SEED_ADMIN_PASSWORD.
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_SAMPLE_CONTENT
+        value: "false"
+
+databases:
+  - name: vd-properties-db
+    region: singapore
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
